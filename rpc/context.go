@@ -134,6 +134,12 @@ func (ctx *Context) removeConn(key string, conn *grpc.ClientConn) {
 
 // GRPCDial calls grpc.Dial with the options appropriate for the context.
 func (ctx *Context) GRPCDial(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	/*
+		_, file, ln, _ := runtime.Caller(1)
+		_, file2, ln2, _ := runtime.Caller(2)
+		fmt.Printf("GRPCDial: %s:%d %s:%d\n", file, ln, file2, ln2)
+	*/
+
 	ctx.conns.Lock()
 	defer ctx.conns.Unlock()
 

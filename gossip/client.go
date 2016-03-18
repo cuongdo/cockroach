@@ -226,6 +226,7 @@ func (c *client) gossip(g *Gossip, gossipClient GossipClient, stopper *stop.Stop
 				if err != nil {
 					return err
 				}
+				fmt.Printf("gossip %d\n", reply.Size())
 				if err := c.handleResponse(g, reply); err != nil {
 					return err
 				}
