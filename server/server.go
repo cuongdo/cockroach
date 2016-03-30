@@ -268,6 +268,8 @@ func (s *Server) Start() error {
 	pgL := m.Match(pgwire.Match)
 	anyL := m.Match(cmux.Any())
 
+	// Wrap the HTTP listener with a CountingListener, to record HTTP traffic
+	// metrics.
 	httpLn, err := net.Listen("tcp", s.ctx.HTTPAddr)
 	if err != nil {
 		return err
@@ -292,7 +294,13 @@ func (s *Server) Start() error {
 	serveConn := util.ServeHandler(s.stopper, s, httpLn, tlsConfig)
 
 	s.stopper.RunWorker(func() {
-		util.FatalIfUnexpected(s.grpc.Serve(anyL))
+		// Start the gRPC server with a CountingListener, which counts the number
+		// of bytes sent and received through the gRPC server. Note that this does
+		// *not* count bytes/in for gRPC clients, because that would require
+		// invasive modifications to grpc-go.
+		countingLn := NewCountingListener(anyL)
+		s.recorder.AddNodeRegistry("rpcserver.%s", countingLn.Registry())
+		util.FatalIfUnexpected(s.grpc.Serve(countingLn))
 	})
 
 	s.stopper.RunWorker(func() {
@@ -529,4 +537,58 @@ func officialAddr(unresolvedAddr string, resolvedAddr net.Addr) (*util.Unresolve
 	}
 
 	return util.NewUnresolvedAddr(resolvedAddr.Network(), net.JoinHostPort(host, port)), nil
+}
+
+// TODO: move this somewhere sensible
+// DO NOT MERGE HERE
+type CountingListener struct {
+	net.Listener
+	registry         *metric.Registry
+	reqBytesCounter  *metric.Counter
+	respBytesCounter *metric.Counter
+}
+
+func NewCountingListener(wrapped net.Listener) *CountingListener {
+	reg := metric.NewRegistry()
+	return &CountingListener{
+		Listener:         wrapped,
+		registry:         reg,
+		reqBytesCounter:  reg.Counter("request-bytes"),
+		respBytesCounter: reg.Counter("response-bytes"),
+	}
+}
+
+func (wl *CountingListener) Registry() *metric.Registry {
+	return wl.registry
+}
+
+func (wl *CountingListener) Accept() (net.Conn, error) {
+	conn, err := wl.Listener.Accept()
+	if err != nil {
+		return conn, err
+	}
+
+	return &countingConn{
+		Conn:            conn,
+		bytesInCounter:  wl.reqBytesCounter,
+		bytesOutCounter: wl.respBytesCounter,
+	}, nil
+}
+
+type countingConn struct {
+	net.Conn
+	bytesInCounter  *metric.Counter
+	bytesOutCounter *metric.Counter
+}
+
+func (c *countingConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.bytesInCounter.Inc(int64(n))
+	return n, err
+}
+
+func (c *countingConn) Write(b []byte) (int, error) {
+	n, err := c.Conn.Write(b)
+	c.bytesOutCounter.Inc(int64(n))
+	return n, err
 }

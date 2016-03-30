@@ -223,16 +223,24 @@ module AdminViews {
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
           );
+          // All of these labels are abbreviated to keep this graph's legend a
+          // manageable size.
           this._addChart(
             this.activityAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
                 .nonNegativeRate()
-                .title("Bytes In"),
+                .title("SQL Req"),
               Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
                 .nonNegativeRate()
-                .title("Bytes Out")
-            ).format(Utils.Format.Bytes).title("SQL Traffic")
+                .title("SQL Resp"),
+              Metrics.Select.Avg(_nodeMetric("rpcserver.request-bytes"))
+                .nonNegativeRate()
+                .title("RPC Req"),
+              Metrics.Select.Avg(_nodeMetric("rpcserver.response-bytes"))
+                .nonNegativeRate()
+                .title("RPC Resp")
+            ).format(Utils.Format.Bytes).title("Network Traffic").legend(true)
           );
           this._addChart(
             this.activityAxes,
@@ -752,18 +760,28 @@ module AdminViews {
                 .title("Client Connections")
             ).format(d3.format(".1")).title("SQL Connections")
           );
+          // All of these labels are abbreviated to keep this graph's legend a
+          // manageable size.
           this._addChart(
             this.activityAxes,
             Metrics.NewAxis(
               Metrics.Select.Avg(_nodeMetric("sql.bytesin"))
                 .sources([this._nodeId])
                 .nonNegativeRate()
-                .title("Bytes In"),
+                .title("SQL Req"),
               Metrics.Select.Avg(_nodeMetric("sql.bytesout"))
                 .sources([this._nodeId])
                 .nonNegativeRate()
-                .title("Bytes Out")
-            ).format(Utils.Format.Bytes).title("SQL Traffic")
+                .title("SQL Resp"),
+              Metrics.Select.Avg(_nodeMetric("rpcserver.request-bytes"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("RPC Req"),
+              Metrics.Select.Avg(_nodeMetric("rpcserver.response-bytes"))
+                .sources([this._nodeId])
+                .nonNegativeRate()
+                .title("RPC Resp")
+            ).format(Utils.Format.Bytes).title("Network Traffic").legend(true)
           );
           this._addChart(
             this.activityAxes,
