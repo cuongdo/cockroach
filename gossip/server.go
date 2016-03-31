@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -44,18 +45,25 @@ type server struct {
 	received int                                    // Count of infos received from clients
 	ready    chan struct{}                          // Broadcasts wakeup to waiting gossip requests
 
+	registry           *metric.Registry
+	protoBytesInCount  *metric.Counter
+	protoBytesOutCount *metric.Counter
+
 	simulationCycler *sync.Cond // Used when simulating the network to signal next cycle
 }
 
 // newServer creates and returns a server struct.
-func newServer(stopper *stop.Stopper) *server {
+func newServer(stopper *stop.Stopper, registry *metric.Registry) *server {
 	return &server{
-		stopper:  stopper,
-		is:       newInfoStore(0, util.UnresolvedAddr{}, stopper),
-		incoming: makeNodeSet(minPeers),
-		nodeMap:  make(map[util.UnresolvedAddr]roachpb.NodeID),
-		tighten:  make(chan roachpb.NodeID, 1),
-		ready:    make(chan struct{}),
+		stopper:            stopper,
+		is:                 newInfoStore(0, util.UnresolvedAddr{}, stopper),
+		incoming:           makeNodeSet(minPeers),
+		nodeMap:            make(map[util.UnresolvedAddr]roachpb.NodeID),
+		tighten:            make(chan roachpb.NodeID, 1),
+		ready:              make(chan struct{}),
+		registry:           registry,
+		protoBytesInCount:  registry.Counter("gossip.proto-bytesin"),
+		protoBytesOutCount: registry.Counter("gossip.proto-bytesout"),
 	}
 }
 
@@ -67,6 +75,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 	if err != nil {
 		return err
 	}
+	s.protoBytesInCount.Inc(int64(args.Size()))
 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
@@ -124,6 +133,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			if err := send(reply); err != nil {
 				return err
 			}
+			s.protoBytesOutCount.Inc(int64(reply.Size()))
 			s.mu.Lock()
 			s.sent += infoCount
 		}
@@ -189,6 +199,9 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 
 				s.mu.Unlock()
 				err := senderFn(reply)
+				if err != nil {
+					s.protoBytesOutCount.Inc(int64(reply.Size()))
+				}
 				s.mu.Lock()
 				return err
 			}
@@ -222,6 +235,9 @@ func (s *server) gossipReceiver(argsPtr **Request, senderFn func(*Response) erro
 
 		s.mu.Unlock()
 		recvArgs, err := receiverFn()
+		if recvArgs != nil {
+			s.protoBytesInCount.Inc(int64(recvArgs.Size()))
+		}
 		s.mu.Lock()
 		if err != nil {
 			return err

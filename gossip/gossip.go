@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/security"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 	"github.com/cockroachdb/cockroach/util/stop"
 	"github.com/gogo/protobuf/proto"
 )
@@ -158,14 +159,21 @@ type Gossip struct {
 	// Membership sets for resolvers and bootstrap addresses.
 	resolverAddrs  map[util.UnresolvedAddr]struct{}
 	bootstrapAddrs map[util.UnresolvedAddr]struct{}
+
+	metrics metrics
 }
 
 // New creates an instance of a gossip node.
-func New(rpcContext *rpc.Context, resolvers []resolver.Resolver, stopper *stop.Stopper) *Gossip {
+func New(
+	rpcContext *rpc.Context,
+	resolvers []resolver.Resolver,
+	stopper *stop.Stopper,
+	registry *metric.Registry,
+) *Gossip {
 	g := &Gossip{
 		Connected:         make(chan struct{}),
 		rpcContext:        rpcContext,
-		server:            newServer(stopper),
+		server:            newServer(stopper, registry),
 		outgoing:          makeNodeSet(minPeers),
 		bootstrapping:     map[string]struct{}{},
 		clients:           []*client{},
@@ -964,4 +972,9 @@ var _ security.RequestWithUser = &Request{}
 // Gossip messages are always sent by the node user.
 func (*Request) GetUser() string {
 	return security.NodeUser
+}
+
+type metrics struct {
+	protoBytesInCounter  *metric.Counter
+	protoBytesOutCounter *metric.Counter
 }
