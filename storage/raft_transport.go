@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/rpc"
 	"github.com/cockroachdb/cockroach/util"
 	"github.com/cockroachdb/cockroach/util/log"
+	"github.com/cockroachdb/cockroach/util/metric"
 )
 
 const (
@@ -68,6 +69,9 @@ type RaftTransport struct {
 	resolver           NodeAddressResolver
 	rpcContext         *rpc.Context
 	SnapshotStatusChan chan RaftSnapshotStatus
+	registry           *metric.Registry
+	protoBytesInCount  *metric.Counter
+	protoBytesOutCount *metric.Counter
 
 	mu struct {
 		sync.Mutex
@@ -79,16 +83,26 @@ type RaftTransport struct {
 // NewDummyRaftTransport returns a dummy raft transport for use in tests which
 // need a non-nil raft transport that need not function.
 func NewDummyRaftTransport() *RaftTransport {
-	return NewRaftTransport(nil, nil, nil)
+	return NewRaftTransport(nil, nil, nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport with specified resolver and grpc server.
 // Callers are responsible for monitoring RaftTransport.SnapshotStatusChan.
-func NewRaftTransport(resolver NodeAddressResolver, grpcServer *grpc.Server, rpcContext *rpc.Context) *RaftTransport {
+func NewRaftTransport(
+	resolver NodeAddressResolver,
+	grpcServer *grpc.Server,
+	rpcContext *rpc.Context,
+	registry *metric.Registry,
+) *RaftTransport {
 	t := &RaftTransport{
 		resolver:           resolver,
 		rpcContext:         rpcContext,
 		SnapshotStatusChan: make(chan RaftSnapshotStatus),
+		registry:           registry,
+	}
+	if registry != nil {
+		t.protoBytesInCount = registry.Counter("raft.proto-bytesin")
+		t.protoBytesOutCount = registry.Counter("raft.proto-bytesout")
 	}
 	t.mu.handlers = make(map[roachpb.StoreID]raftMessageHandler)
 	t.mu.queues = make(map[roachpb.NodeID]chan *RaftMessageRequest)
@@ -111,6 +125,9 @@ func (t *RaftTransport) RaftMessage(stream MultiRaft_RaftMessageServer) (err err
 					req, err := stream.Recv()
 					if err != nil {
 						return err
+					}
+					if t.protoBytesOutCount != nil {
+						t.protoBytesInCount.Inc(int64(req.Size()))
 					}
 
 					t.mu.Lock()
@@ -287,6 +304,9 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 
 	select {
 	case ch <- req:
+		if t.protoBytesOutCount != nil {
+			t.protoBytesOutCount.Inc(int64(req.Size()))
+		}
 		return nil
 	default:
 		return util.Errorf("queue for node %d is full", req.Message.To)

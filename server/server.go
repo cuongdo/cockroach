@@ -120,6 +120,9 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 	s.clock.SetMaxOffset(ctx.MaxOffset)
 
+	// Create a new shared registry to track metrics for our gRPC servers.
+	rpcRegistry := metric.NewRegistry()
+
 	s.rpcContext = rpc.NewContext(&ctx.Context, s.clock, stopper)
 	s.rpcContext.HeartbeatCB = func() {
 		if err := s.rpcContext.RemoteClocks.VerifyClockOffset(); err != nil {
@@ -154,7 +157,8 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.db = client.NewDB(sender)
 
 	s.grpc = rpc.NewServer(s.rpcContext)
-	s.raftTransport = storage.NewRaftTransport(storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext)
+	s.raftTransport = storage.NewRaftTransport(
+		storage.GossipAddressResolver(s.gossip), s.grpc, s.rpcContext, rpcRegistry)
 
 	s.kvDB = kv.NewDBServer(&s.ctx.Context, sender, stopper)
 	roachpb.RegisterExternalServer(s.grpc, s.kvDB)
@@ -200,6 +204,7 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	s.recorder.AddNodeRegistry("sql.%s", sqlRegistry)
 	s.recorder.AddNodeRegistry("txn.%s", txnRegistry)
 	s.recorder.AddNodeRegistry("clock-offset.%s", s.rpcContext.RemoteClocks.Registry())
+	s.recorder.AddNodeRegistry("rpc.%s", rpcRegistry)
 
 	s.runtime = status.MakeRuntimeStatSampler(s.clock)
 	s.recorder.AddNodeRegistry("sys.%s", s.runtime.Registry())
