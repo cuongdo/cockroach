@@ -20,18 +20,18 @@ allocations.
 For example, consider the following scenario where we have 3 perfectly balanced
 stores:
 
-![balanced stores](centralized_replica_allocator_images/thrashing1.svg)
+![balanced stores](centralized_replica_allocator_images/thrashing1.png)
 
 Let's add an empty store:
 
-![new store](centralized_replica_allocator_images/thrashing2.svg)
+![new store](centralized_replica_allocator_images/thrashing2.png)
 
 Until recently, our replica allocator had no limits for how fast rebalancing
 could occur. Combined with lack of current `StoreDescriptor`s and lack of
 coordination between replica allocators, an over-allocation to the new
 store is likely to occur:
 
-![over-rebalancing](centralized_replica_allocator_images/thrashing3.svg)
+![over-rebalancing](centralized_replica_allocator_images/thrashing3.png)
 
 This over-rebalancing would continue for many cycles, often resulting in tens
 of thousands of replicas adds and removes for clusters with miniscule data.
