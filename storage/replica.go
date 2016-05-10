@@ -26,6 +26,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -1018,7 +1019,9 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 //
 // TODO(tschottdorf): find a way not to update the batch txn
 //   which should be immutable.
-func (r *Replica) applyTimestampCache(ba *roachpb.BatchRequest) *roachpb.Error {
+func (r *Replica) applyTimestampCache(
+	ctx context.Context, ba *roachpb.BatchRequest,
+) *roachpb.Error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1214,6 +1217,7 @@ func (r *Replica) addWriteCmd(
 	// been run to successful completion.
 	log.Trace(ctx, "command queue")
 	endCmdsFunc := r.beginCmds(&ba)
+	log.Trace(ctx, "left command queue")
 
 	// Guarantee we remove the commands from the command queue. This is
 	// wrapped to delay pErr evaluation to its value when returning.
@@ -1236,17 +1240,19 @@ func (r *Replica) addWriteCmd(
 		pErr = nil
 	}
 
+	log.Trace(ctx, "prep for ts cache")
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if pErr := r.applyTimestampCache(&ba); pErr != nil {
+	if pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
 		return nil, pErr
 	}
 
-	log.Trace(ctx, "raft")
+	log.Trace(ctx, "applied ts cache")
 
 	pendingCmd, err := r.proposeRaftCommand(ctx, ba)
+	log.Trace(ctx, "proposed to Raft")
 
 	signal()
 
@@ -1256,6 +1262,7 @@ func (r *Replica) addWriteCmd(
 		for br == nil && pErr == nil {
 			select {
 			case respWithErr := <-pendingCmd.done:
+				log.Trace(ctx, "response obtained")
 				br, pErr = respWithErr.Reply, respWithErr.Err
 			case <-ctxDone:
 				// Cancellation is somewhat tricky since we can't prevent the
@@ -1607,6 +1614,7 @@ func (r *Replica) processRaftCommand(idKey storagebase.CmdIDKey, index uint64, r
 	// replica corruption (as of now, signaled by a replicaCorruptionError).
 	// We feed its return through maybeSetCorrupt to act when that happens.
 	br, err := r.applyRaftCommand(idKey, ctx, index, raftCmd.OriginReplica, raftCmd.Cmd)
+	log.Trace(ctx, "applied batch")
 	err = r.maybeSetCorrupt(err)
 
 	if cmd != nil {
@@ -1661,6 +1669,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 		br, rErr = nil, roachpb.NewError(roachpb.NewRangeFrozenError(*r.Desc()))
 	}
 	defer batch.Close()
+	log.Trace(ctx, "prep for commit")
 
 	// Advance the last applied index and commit the batch.
 	if err := setAppliedIndex(batch, &ms, r.RangeID, index); err != nil {
@@ -1689,6 +1698,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 		}
 		r.mu.Unlock()
 	}
+	log.Trace(ctx, "committed")
 
 	// On successful write commands handle write-related triggers including
 	// splitting.
@@ -1701,6 +1711,7 @@ func (r *Replica) applyRaftCommand(idKey storagebase.CmdIDKey, ctx context.Conte
 	// asynchronously - even on failure.
 	if originReplica.StoreID == r.store.StoreID() {
 		r.store.intentResolver.processIntentsAsync(r, intents)
+		log.Trace(ctx, "processed async intents")
 	}
 
 	return br, rErr
@@ -1723,6 +1734,7 @@ func (r *Replica) applyRaftCommandInBatch(
 		if pErr := r.checkIfTxnAborted(ctx, r.store.Engine(), *ba.Txn); pErr != nil {
 			return r.store.Engine().NewBatch(), engine.MVCCStats{}, nil, nil, pErr
 		}
+		log.Trace(ctx, "checked aborted txn")
 	}
 
 	for _, union := range ba.Requests {
@@ -1749,6 +1761,7 @@ func (r *Replica) applyRaftCommandInBatch(
 				roachpb.NewError(r.newNotLeaderError(lease, originReplica.StoreID))
 		}
 	}
+	log.Trace(ctx, "checked leadership")
 
 	// Keep track of original txn Writing state to santitize txn
 	// reported with any error except TransactionRetryError.
@@ -1758,6 +1771,7 @@ func (r *Replica) applyRaftCommandInBatch(
 	// be committed (EndTransaction with a CommitTrigger may unlock
 	// readOnlyCmdMu via a batch.Defer).
 	btch, ms, br, intents, pErr := r.executeWriteBatch(ctx, idKey, ba)
+	log.Trace(ctx, "executed batch")
 
 	if ba.IsWrite() {
 		if pErr != nil {
@@ -1907,7 +1921,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest) bool {
 // range of keys being written is empty. If so, then the run can be
 // set to put "blindly", meaning no iterator need be used to read
 // existing values during the MVCC write.
-func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
+func optimizePuts(ctx context.Context, batch engine.Engine, reqs []roachpb.RequestUnion) {
 	var minKey, maxKey roachpb.Key
 	unique := make(map[string]struct{}, len(reqs))
 	// Returns false on occurrence of a duplicate key.
@@ -1943,6 +1957,7 @@ func optimizePuts(batch engine.Engine, reqs []roachpb.RequestUnion) {
 	if len(unique) < optimizePutThreshold { // don't bother if below this threshold
 		return
 	}
+	log.Trace(ctx, strconv.Itoa(len(unique))+" blind puts")
 	iter := batch.NewIterator(false /* total order iterator */)
 	defer iter.Close()
 
@@ -1987,7 +2002,7 @@ func (r *Replica) executeBatch(
 
 	// Optimize any contiguous sequences of put and conditional put ops.
 	if len(ba.Requests) >= optimizePutThreshold {
-		optimizePuts(batch, ba.Requests)
+		optimizePuts(ctx, batch, ba.Requests)
 	}
 
 	for index, union := range ba.Requests {
