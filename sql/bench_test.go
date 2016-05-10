@@ -914,8 +914,8 @@ func BenchmarkTrackChoices100_Cockroach(b *testing.B) {
 	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
 }
 
-func BenchmarkTrackChoices1000_Cockroach(b *testing.B) {
-	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+func BenchmarkTrackChoices1280_Cockroach(b *testing.B) {
+	benchmarkCockroach(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1280) })
 }
 
 func BenchmarkTrackChoices1_Postgres(b *testing.B) {
