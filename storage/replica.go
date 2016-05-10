@@ -828,6 +828,7 @@ func (r *Replica) RaftStatus() *raft.Status {
 // either along the read-only execution path or the read-write Raft
 // command queue.
 func (r *Replica) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	defer log.Trace(ctx, "Send returns")
 	r.assert5725(ba)
 
 	var br *roachpb.BatchResponse
@@ -921,7 +922,9 @@ func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest) error {
 // already in the queue. Returns a cleanup function to be called when the
 // commands are done and can be removed from the queue, and whose returned
 // error is to be used in place of the supplied error.
-func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchResponse, *roachpb.Error) *roachpb.Error {
+func (r *Replica) beginCmds(
+	ba *roachpb.BatchRequest,
+) func(context.Context, *roachpb.BatchResponse, *roachpb.Error) *roachpb.Error {
 	var cmd *cmd
 	// Don't use the command queue for inconsistent reads.
 	if ba.ReadConsistency != roachpb.INCONSISTENT {
@@ -956,20 +959,29 @@ func (r *Replica) beginCmds(ba *roachpb.BatchRequest) func(*roachpb.BatchRespons
 		}
 	}
 
-	return func(br *roachpb.BatchResponse, pErr *roachpb.Error) *roachpb.Error {
-		return r.endCmds(cmd, ba, br, pErr)
+	return func(
+		ctx context.Context, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	) *roachpb.Error {
+		return r.endCmds(ctx, cmd, ba, br, pErr)
 	}
 }
 
 // endCmds removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 // The returned error replaces the supplied error.
-func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error) (rErr *roachpb.Error) {
+func (r *Replica) endCmds(
+	ctx context.Context,
+	cmd *cmd,
+	ba *roachpb.BatchRequest,
+	br *roachpb.BatchResponse,
+	pErr *roachpb.Error,
+) (rErr *roachpb.Error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Only update the timestamp cache if the command succeeded and is
 	// marked as affecting the cache. Inconsistent reads are excluded.
+	log.Trace(ctx, "begin update tsCache")
 	if pErr == nil && ba.ReadConsistency != roachpb.INCONSISTENT {
 		cr := cacheRequest{
 			timestamp: ba.Timestamp,
@@ -998,7 +1010,9 @@ func (r *Replica) endCmds(cmd *cmd, ba *roachpb.BatchRequest, br *roachpb.BatchR
 
 		r.mu.tsCache.AddRequest(cr)
 	}
+	log.Trace(ctx, "end update tsCache")
 	r.mu.cmdQ.remove(cmd)
+	log.Trace(ctx, "removed from cmdQ")
 	return pErr
 }
 
@@ -1159,7 +1173,7 @@ func (r *Replica) addReadOnlyCmd(ctx context.Context, ba roachpb.BatchRequest) (
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr)
+		pErr = endCmdsFunc(ctx, br, pErr)
 	}()
 
 	// Execute read-only batch command. It checks for matching key range; note
@@ -1222,7 +1236,9 @@ func (r *Replica) addWriteCmd(
 	// Guarantee we remove the commands from the command queue. This is
 	// wrapped to delay pErr evaluation to its value when returning.
 	defer func() {
-		pErr = endCmdsFunc(br, pErr)
+		log.Trace(ctx, "endCmds begins")
+		pErr = endCmdsFunc(ctx, br, pErr)
+		log.Trace(ctx, "endCmds ends")
 	}()
 
 	// This replica must have leader lease to process a write, except when it's
@@ -1336,7 +1352,7 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 	}
 	r.mu.pendingCmds[idKey] = pendingCmd
 
-	if err := r.proposePendingCmdLocked(pendingCmd); err != nil {
+	if err := r.proposePendingCmdLocked(ctx, pendingCmd); err != nil {
 		delete(r.mu.pendingCmds, idKey)
 		return nil, err
 	}
@@ -1345,19 +1361,25 @@ func (r *Replica) proposeRaftCommand(ctx context.Context, ba roachpb.BatchReques
 
 // proposePendingCmdLocked proposes or re-proposes a command in r.mu.pendingCmds.
 // The replica lock must be held.
-func (r *Replica) proposePendingCmdLocked(p *pendingCmd) error {
+func (r *Replica) proposePendingCmdLocked(
+	ctx context.Context, p *pendingCmd,
+) error {
 	if r.mu.proposeRaftCommandFn != nil {
 		return r.mu.proposeRaftCommandFn(p)
 	}
-	return defaultProposeRaftCommandLocked(r, p)
+	return defaultProposeRaftCommandLocked(ctx, r, p)
 }
 
-func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
+func defaultProposeRaftCommandLocked(
+	ctx context.Context, r *Replica, p *pendingCmd,
+) error {
 	if p.raftCmd.Cmd.Timestamp == roachpb.ZeroTimestamp {
 		return util.Errorf("can't propose Raft command with zero timestamp")
 	}
 
+	log.Trace(ctx, "start marshal")
 	data, err := protoutil.Marshal(&p.raftCmd)
+	log.Trace(ctx, "end marshal")
 	if err != nil {
 		return err
 	}
@@ -1391,6 +1413,8 @@ func defaultProposeRaftCommandLocked(r *Replica, p *pendingCmd) error {
 				})
 		}
 	}
+	log.Trace(ctx, "begin prop")
+	defer log.Trace(ctx, "done prop")
 	return r.mu.raftGroup.Propose(encodeRaftCommand(string(p.idKey), data))
 }
 
@@ -1533,7 +1557,7 @@ func (r *Replica) reproposePendingCmdsLocked() error {
 			log.Infof("reproposing %d commands after empty entry", len(r.mu.pendingCmds))
 		}
 		for _, p := range r.mu.pendingCmds {
-			if err := r.proposePendingCmdLocked(p); err != nil {
+			if err := r.proposePendingCmdLocked(context.Background(), p); err != nil {
 				return err
 			}
 		}
@@ -1853,6 +1877,7 @@ func (r *Replica) executeWriteBatch(
 		br, intents, pErr := r.executeBatch(ctx, idKey, batch, &ms, ba)
 		return batch, ms, br, intents, pErr
 	}
+	log.Trace(ctx, "executing as 1PC txn")
 
 	// Try executing with transaction stripped.
 	strippedBa := ba
@@ -1994,6 +2019,7 @@ func (r *Replica) executeBatch(
 	*roachpb.BatchResponse, []intentsWithArg, *roachpb.Error) {
 	br := ba.CreateReply()
 	var intents []intentsWithArg
+	defer log.Trace(ctx, "executeBatch returns")
 
 	remScanResults := int64(math.MaxInt64)
 	if ba.Header.MaxScanResults != 0 {
