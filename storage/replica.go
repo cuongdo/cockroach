@@ -1245,8 +1245,10 @@ func (r *Replica) addWriteCmd(
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
-		return nil, pErr
+	if false { // HACK(tschottdorf)
+		if pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+			return nil, pErr
+		}
 	}
 
 	log.Trace(ctx, "applied ts cache")
