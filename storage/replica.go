@@ -1994,7 +1994,7 @@ func optimizePuts(ctx context.Context, batch engine.Engine, reqs []roachpb.Reque
 	iter.Seek(engine.MakeMVCCMetadataKey(minKey))
 	var iterKey roachpb.Key
 	if iter.Valid() && bytes.Compare(iter.Key().Key, maxKey) <= 0 {
-		iterKey = iter.Key().Key
+		// iterKey = iter.Key().Key
 	}
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.

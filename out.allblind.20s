@@ -1,0 +1,3 @@
+PASS
+BenchmarkTrackChoices1280_Cockroach-8	  500000	     79451 ns/op	   29265 B/op	     145 allocs/op
+ok  	github.com/cockroachdb/cockroach/sql	40.904s
