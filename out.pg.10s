@@ -1,0 +1,4 @@
+PASS
+# ACTUALLY POSTGRES
+BenchmarkTrackChoices1280_Cockroach-8	 1000000	     16282 ns/op	     131 B/op	       2 allocs/op
+ok  	github.com/cockroachdb/cockroach/sql	16.487s

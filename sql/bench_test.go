@@ -81,7 +81,7 @@ func benchmarkPostgres(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	// is replaced with your local Cockroach source directory.
 	// Be sure to restart Postgres for this to take effect.
 
-	db, err := gosql.Open("postgres", "sslmode=require host=localhost port=5432")
+	db, err := gosql.Open("postgres", "sslmode=disable host=192.168.99.100 user=postgres port=5432")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -930,8 +930,8 @@ func BenchmarkTrackChoices100_Postgres(b *testing.B) {
 	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 100) })
 }
 
-func BenchmarkTrackChoices1000_Postgres(b *testing.B) {
-	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1000) })
+func BenchmarkTrackChoices1280_Postgres(b *testing.B) {
+	benchmarkPostgres(b, func(b *testing.B, db *gosql.DB) { runBenchmarkTrackChoices(b, db, 1280) })
 }
 
 // Benchmark inserting distinct rows in batches where the min and max rows in
