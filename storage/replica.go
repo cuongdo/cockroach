@@ -987,7 +987,6 @@ func (r *Replica) endCmds(
 			timestamp: ba.Timestamp,
 			txnID:     ba.GetTxnID(),
 		}
-
 		for _, union := range ba.Requests {
 			args := union.GetInner()
 			if updatesTimestampCache(args) {
