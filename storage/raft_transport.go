@@ -259,7 +259,9 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
+			t.mu.Lock()
 			t.mu.queueCounts[nodeID]--
+			t.mu.Unlock()
 			if req.Message.Type == raftpb.MsgSnap {
 				t.rpcContext.Stopper.RunAsyncTask(func() {
 					err := snapStream.Send(req)
