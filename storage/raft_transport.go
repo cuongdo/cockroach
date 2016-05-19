@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
+	"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -37,7 +38,7 @@ import (
 const (
 	// Outgoing messages are queued on a per-node basis on a channel of
 	// this size.
-	raftSendBufferSize = 10000
+	raftSendBufferSize = 20000000
 	// When no message has been sent to a Node for that duration, the
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
@@ -301,6 +302,14 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 	case ch <- req:
 		return nil
 	default:
+		for _, entry := range req.Message.Entries {
+			var ba roachpb.BatchRequest
+			if err := proto.Unmarshal(entry.Data, &ba); err != nil {
+				util.Errorf("couldn't unmarshal: %v", err)
+			} else {
+				util.Errorf("tossing %s", ba.String())
+			}
+		}
 		return util.Errorf("queue for node %d is full", req.ToReplica.NodeID)
 	}
 }
