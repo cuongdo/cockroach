@@ -37,7 +37,7 @@ import (
 const (
 	// Outgoing messages are queued on a per-node basis on a channel of
 	// this size.
-	raftSendBufferSize = 500
+	raftSendBufferSize = 10000
 	// When no message has been sent to a Node for that duration, the
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
