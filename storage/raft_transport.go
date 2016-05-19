@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/coreos/etcd/raft/raftpb"
-	"github.com/gogo/protobuf/proto"
+	//"github.com/gogo/protobuf/proto"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
@@ -38,7 +38,7 @@ import (
 const (
 	// Outgoing messages are queued on a per-node basis on a channel of
 	// this size.
-	raftSendBufferSize = 20000000
+	raftSendBufferSize = 5000
 	// When no message has been sent to a Node for that duration, the
 	// corresponding instance of processQueue will shut down.
 	raftIdleTimeout = time.Minute
@@ -73,8 +73,9 @@ type RaftTransport struct {
 
 	mu struct {
 		sync.Mutex
-		handlers map[roachpb.StoreID]raftMessageHandler
-		queues   map[roachpb.NodeID]chan *RaftMessageRequest
+		handlers    map[roachpb.StoreID]raftMessageHandler
+		queues      map[roachpb.NodeID]chan *RaftMessageRequest
+		queueCounts map[roachpb.NodeID]int64
 	}
 }
 
@@ -234,6 +235,8 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 	restStream := streams[1]
 
 	var raftIdleTimer timeutil.Timer
+	queueCountTicker := time.NewTicker(time.Second)
+
 	defer raftIdleTimer.Stop()
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
@@ -256,6 +259,7 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 			}
 			return
 		case req := <-ch:
+			t.mu.queueCounts[nodeID]--
 			if req.Message.Type == raftpb.MsgSnap {
 				t.rpcContext.Stopper.RunAsyncTask(func() {
 					err := snapStream.Send(req)
@@ -272,6 +276,10 @@ func (t *RaftTransport) processQueue(nodeID roachpb.NodeID) {
 					return
 				}
 			}
+		case <-queueCountTicker.C:
+			t.mu.Lock()
+			log.Errorf("queue size for node %d = %d", nodeID, t.mu.queueCounts[nodeID])
+			t.mu.Unlock()
 		}
 	}
 }
@@ -298,18 +306,15 @@ func (t *RaftTransport) Send(req *RaftMessageRequest) error {
 		return util.Errorf("node stopped")
 	}
 
+	log.Errorf("sending entry type4 %v", req.Message.Type)
+
 	select {
 	case ch <- req:
+		t.mu.Lock()
+		t.mu.queueCounts[req.ToReplica.NodeID]++
+		t.mu.Unlock()
 		return nil
 	default:
-		for _, entry := range req.Message.Entries {
-			var ba roachpb.BatchRequest
-			if err := proto.Unmarshal(entry.Data, &ba); err != nil {
-				util.Errorf("couldn't unmarshal: %v", err)
-			} else {
-				util.Errorf("tossing %s", ba.String())
-			}
-		}
 		return util.Errorf("queue for node %d is full", req.ToReplica.NodeID)
 	}
 }
