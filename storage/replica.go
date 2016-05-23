@@ -93,7 +93,7 @@ const (
 
 	// LeaderLeaseActiveDuration is the duration of the active period of leader
 	// leases requested.
-	LeaderLeaseActiveDuration = time.Second
+	LeaderLeaseActiveDuration = 6 * time.Second
 	// leaderLeaseRenewalDuration specifies a "time" interval at the
 	// end of the active lease interval (i.e. bounded to the right by the
 	// start of the stasis period) during which timestamps will trigger an

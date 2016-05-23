@@ -54,8 +54,8 @@ import (
 const (
 	// rangeIDAllocCount is the number of Range IDs to allocate per allocation.
 	rangeIDAllocCount               = 10
-	defaultHeartbeatIntervalTicks   = 70
-	defaultRaftElectionTimeoutTicks = 150
+	defaultHeartbeatIntervalTicks   = 15
+	defaultRaftElectionTimeoutTicks = 20
 	defaultAsyncSnapshotMaxAge      = time.Minute
 	// ttlStoreGossip is time-to-live for store-related info.
 	ttlStoreGossip = 2 * time.Minute
