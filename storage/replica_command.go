@@ -2391,7 +2391,9 @@ func (r *Replica) splitTrigger(
 	// EndTransaction, but the plumbing has not been done yet.
 	sp := r.store.Tracer().StartSpan("split")
 	defer sp.Finish()
+	log.Trace(ctx, "before Desc")
 	desc := r.Desc()
+	log.Trace(ctx, "after Desc")
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||
 		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
 		return enginepb.MVCCStats{}, nil, errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
@@ -2400,7 +2402,9 @@ func (r *Replica) splitTrigger(
 	}
 
 	// Preserve stats for pre-split range, excluding the current batch.
+	log.Trace(ctx, "before GetMVCCStats")
 	origBothMS := r.GetMVCCStats()
+	log.Trace(ctx, "after GetMVCCStats")
 
 	// TODO(d4l3k): we should check which side of the split is smaller
 	// and compute stats for it instead of having a constraint that the

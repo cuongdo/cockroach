@@ -40,7 +40,7 @@ variable "gce_machine_type" {
 # Path to the cockroach binary. An empty value results in the latest official
 # binary being used.
 variable "cockroach_binary" {
-  default = ""
+  default = "~/go/src/github.com/cockroachdb/cockroach/cockroach-linux"
 }
 
 # Name of the ssh key pair to use for GCE instances.

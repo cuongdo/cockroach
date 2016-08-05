@@ -393,6 +393,8 @@ func snapshot(
 	start := timeutil.Now()
 	var snapData roachpb.RaftSnapshotData
 
+	log.Trace(ctx, "start snapshot generation")
+
 	truncState, err := loadTruncatedState(ctx, snap, rangeID)
 	if err != nil {
 		return raftpb.Snapshot{}, err
@@ -418,6 +420,7 @@ func snapshot(
 	if !ok {
 		return raftpb.Snapshot{}, errors.Errorf("couldn't find range descriptor")
 	}
+	log.Trace(ctx, "get range descriptor")
 
 	// Store RangeDescriptor as metadata, it will be retrieved by ApplySnapshot()
 	snapData.RangeDescriptor = desc
@@ -438,6 +441,7 @@ func snapshot(
 				Timestamp: key.Timestamp,
 			})
 	}
+	log.Trace(ctx, "iterated through replica data")
 
 	endIndex := appliedIndex + 1
 	snapData.LogEntries = make([][]byte, 0, endIndex-firstIndex)
@@ -453,11 +457,13 @@ func snapshot(
 	if err := iterateEntries(ctx, snap, rangeID, firstIndex, endIndex, scanFunc); err != nil {
 		return raftpb.Snapshot{}, err
 	}
+	log.Trace(ctx, "iterateEntries")
 
 	data, err := protoutil.Marshal(&snapData)
 	if err != nil {
 		return raftpb.Snapshot{}, err
 	}
+	log.Trace(ctx, "marshal snapshot data")
 
 	// Synthesize our raftpb.ConfState from desc.
 	var cs raftpb.ConfState

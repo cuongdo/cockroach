@@ -98,7 +98,7 @@ func (f *Farmer) Add(nodes int) error {
 
 	// Disable update checks for test clusters by setting the required environment
 	// variable.
-	const skipCheck = "COCKROACH_SKIP_UPDATE_CHECK=1"
+	const skipCheck = "COCKROACH_SKIP_UPDATE_CHECK=1,COCKROACH_TRACE_SQL=1"
 	// This is a Terraform variable defined in acceptance/terraform/variables.tf
 	// and passed through to the supervisor.conf file through
 	// acceptance/terraform/main.tf.
