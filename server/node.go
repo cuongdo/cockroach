@@ -776,6 +776,7 @@ func (n *Node) Batch(
 	}
 
 	f := func() {
+		log.Infof(ctx, "starting Batch")
 		sp, err := tracing.JoinOrNew(n.ctx.Tracer, args.Trace, opName)
 		if err != nil {
 			fail(err)

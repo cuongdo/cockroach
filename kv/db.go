@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/security"
+	"github.com/cockroachdb/cockroach/util/log"
 	"github.com/cockroachdb/cockroach/util/stop"
 )
 
@@ -70,6 +71,7 @@ func NewDBServer(ctx *base.Context, sender client.Sender, stopper *stop.Stopper)
 func (s *DBServer) Batch(
 	ctx context.Context, args *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, err error) {
+	log.Info(ctx, "starting Batch 2")
 	// TODO(marc,bdarnell): this code is duplicated in server/node.go,
 	// which should be fixed.
 	defer func() {

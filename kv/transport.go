@@ -181,6 +181,7 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 	go func() {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
+		log.Infof(ctx, "sending request to %s: %+v", addr)
 
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {

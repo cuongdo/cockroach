@@ -967,12 +967,13 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf(context.TODO(), "RPC error: %s", err)
+				log.Warningf(context.TODO(), "RPC error: %s (%s)", err)
 			}
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Tracef(opts.Context, "error, trying next peer: %s", err)
+				log.Tracef(opts.Context, "error, trying next peer: %s (%s)", err,
+					call.Reply.Error.GetDetail())
 				pending++
 				transport.SendNext(done)
 			}
