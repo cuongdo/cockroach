@@ -22,7 +22,7 @@ serverurl=http://127.0.0.1:9001 ; use an http:// url to specify an inet socket
 
 [program:cockroach]
 directory=%(here)s
-command=%(here)s/cockroach start --alsologtostderr=true ${stores} --insecure --join=${join_address} ${cockroach_flags}
+command=%(here)s/cockroach start --alsologtostderr=true ${stores} --insecure --join=${join_address} --cache=2GiB ${cockroach_flags}
 process_name=%(program_name)s
 numprocs=1
 autostart=false
