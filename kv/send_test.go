@@ -169,9 +169,10 @@ func (c *channelSaveTransport) IsExhausted() bool {
 	return c.remaining <= 0
 }
 
-func (c *channelSaveTransport) SendNext(done chan BatchCall) {
+func (c *channelSaveTransport) SendNext(done chan BatchCall) string {
 	c.remaining--
 	c.ch <- done
+	return ""
 }
 
 func (*channelSaveTransport) Close() {
@@ -517,7 +518,7 @@ func (f *firstNErrorTransport) IsExhausted() bool {
 	return f.numSent >= len(f.replicas)
 }
 
-func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
+func (f *firstNErrorTransport) SendNext(done chan BatchCall) string {
 	call := BatchCall{
 		Reply: &roachpb.BatchResponse{},
 	}
@@ -526,6 +527,7 @@ func (f *firstNErrorTransport) SendNext(done chan BatchCall) {
 	}
 	f.numSent++
 	done <- call
+	return ""
 }
 
 func (*firstNErrorTransport) Close() {

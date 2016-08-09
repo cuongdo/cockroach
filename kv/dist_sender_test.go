@@ -96,13 +96,14 @@ func (l *legacyTransportAdapter) IsExhausted() bool {
 	return l.called
 }
 
-func (l *legacyTransportAdapter) SendNext(done chan BatchCall) {
+func (l *legacyTransportAdapter) SendNext(done chan BatchCall) string {
 	l.called = true
 	br, err := l.f(l.opts, l.replicas, l.args, l.rpcContext)
 	done <- BatchCall{
 		Reply: br,
 		Err:   err,
 	}
+	return ""
 }
 
 func (*legacyTransportAdapter) Close() {
@@ -1709,7 +1710,7 @@ func (t *slowLeaseHolderTransport) IsExhausted() bool {
 	return false
 }
 
-func (t *slowLeaseHolderTransport) SendNext(done chan BatchCall) {
+func (t *slowLeaseHolderTransport) SendNext(done chan BatchCall) string {
 	if t.count == 0 {
 		// Save the first request to finish later.
 		t.slowReqChan = done
@@ -1720,6 +1721,7 @@ func (t *slowLeaseHolderTransport) SendNext(done chan BatchCall) {
 		done <- BatchCall{Reply: &br}
 	}
 	t.count++
+	return ""
 }
 
 func (t *slowLeaseHolderTransport) Close() {

@@ -925,7 +925,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 
 	// Send the first request.
 	pending := 1
-	transport.SendNext(done)
+	addr := transport.SendNext(done)
 
 	// Wait for completions. This loop will retry operations that fail
 	// with errors that reflect per-replica state and may succeed on
@@ -939,9 +939,9 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			sendNextTimer.Read = true
 			// On successive RPC timeouts, send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Trace(opts.Context, "timeout, trying next peer")
+				log.Tracef(opts.Context, "timed out sending to %s, trying next peer", addr)
 				pending++
-				transport.SendNext(done)
+				addr = transport.SendNext(done)
 			}
 
 		case call := <-done:
@@ -972,10 +972,9 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
-				log.Tracef(opts.Context, "error, trying next peer: %s (%s)", err,
-					call.Reply.Error.GetDetail())
+				log.Tracef(opts.Context, "error from %s, trying next peer: %s", addr, err)
 				pending++
-				transport.SendNext(done)
+				addr = transport.SendNext(done)
 			}
 			if pending == 0 {
 				return nil, roachpb.NewSendError(
