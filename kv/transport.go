@@ -109,6 +109,11 @@ type Transport interface {
 	Close()
 }
 
+type tryNextTransport interface {
+	// Prefer TODO: fill this in
+	TryNext(desc roachpb.ReplicaDescriptor) error
+}
+
 // grpcTransportFactory is the default TransportFactory, using GRPC.
 func grpcTransportFactory(
 	opts SendOptions,
@@ -141,16 +146,18 @@ func grpcTransportFactory(
 	splitHealthy(clients)
 
 	return &grpcTransport{
-		opts:           opts,
-		rpcContext:     rpcContext,
-		orderedClients: clients,
+		opts:              opts,
+		rpcContext:        rpcContext,
+		orderedClients:    clients,
+		allOrderedClients: clients,
 	}, nil
 }
 
 type grpcTransport struct {
-	opts           SendOptions
-	rpcContext     *rpc.Context
-	orderedClients []batchClient
+	opts              SendOptions
+	rpcContext        *rpc.Context
+	orderedClients    []batchClient
+	allOrderedClients []batchClient
 }
 
 func (gt *grpcTransport) IsExhausted() bool {
@@ -171,6 +178,7 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 
 	if localServer := gt.rpcContext.GetLocalInternalServerForAddr(addr); enableLocalCalls && localServer != nil {
 		ctx, cancel := gt.opts.contextWithTimeout()
+		log.Trace(ctx, "executing local RPC")
 		defer cancel()
 
 		reply, err := localServer.Batch(ctx, &client.args)
@@ -180,8 +188,8 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 
 	go func() {
 		ctx, cancel := gt.opts.contextWithTimeout()
+		log.Tracef(ctx, "sending RPC to %s", addr)
 		defer cancel()
-
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
@@ -194,6 +202,45 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 	}()
 
 	return addr
+}
+
+func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) error {
+	if gt.IsExhausted() {
+		return errors.New("transport is exhausted")
+	}
+	if replica.ReplicaID == 0 {
+		return errors.New("new leader is <nil>")
+	}
+
+	// The client was going to be tried later, so we move it up to the head of
+	// the slice.
+	for i, c := range gt.orderedClients {
+		if c.args.Replica == replica {
+			// Move the client to the beginning of the slice.
+			oc := make([]batchClient, len(gt.orderedClients))
+			oc = append(oc, gt.orderedClients[i])
+			oc = append(oc, gt.orderedClients[:i]...)
+			oc = append(oc, gt.orderedClients[i+1:]...)
+			log.Info(context.TODO(), "TryNext: found replica")
+			return nil
+		}
+	}
+
+	// A client we've already tried has been passed in. So, we try it again. To
+	// prevent excessive retries, we eliminate the least preferred client.
+	for _, c := range gt.allOrderedClients {
+		if c.args.Replica == replica {
+			gt.orderedClients = append([]batchClient{c}, gt.orderedClients[:len(gt.orderedClients)-1]...)
+			log.Info(context.TODO(), "TryNext: found replica 2")
+			return nil
+		}
+	}
+
+	// There is no existing client for the given replica, and we don't have
+	// access to gossip for doing a replica -> Node ID -> address lookup needed to
+	// issue an RPC. So, we can't do anything useful here. Hopefully, a successive
+	// retry at an upper layer will allow this RPC to succeed.
+	return errors.Errorf("couldn't find client for replica %s", replica)
 }
 
 func (*grpcTransport) Close() {

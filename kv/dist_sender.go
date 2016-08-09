@@ -949,12 +949,12 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(context.TODO(), "RPC reply: %+v", call.Reply)
+					log.Infof(opts.Context, "RPC reply: %+v", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
 					log.Infof(context.TODO(), "application error: %s", call.Reply.Error)
 				}
 
-				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
+				if !ds.handlePerReplicaError(opts.Context, rangeID, call.Reply.Error, transport) {
 					return call.Reply, nil
 				}
 
@@ -967,7 +967,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf(context.TODO(), "RPC error: %s (%s)", err)
+				log.Warningf(opts.Context, "RPC error: %s (%s)", err)
 			}
 
 			// Send to additional replicas if available.
@@ -990,7 +990,11 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 // replicas is likely to produce different results. This method should
 // be called only once for each error as it may have side effects such
 // as updating caches.
-func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roachpb.Error) bool {
+func (ds *DistSender) handlePerReplicaError(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	pErr *roachpb.Error,
+	transport Transport) bool {
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
 		return true
@@ -999,10 +1003,20 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 	case *roachpb.NotLeaseHolderError:
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
-			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
+			leaseHolder := *tErr.LeaseHolder
+			ds.updateLeaseHolderCache(rangeID, leaseHolder)
 
-			// TODO(bdarnell): Move the new lease holder to the head of the queue
-			// for the next retry.
+			// Prioritize new lease holder for next try.
+			t, ok := transport.(tryNextTransport)
+			if leaseHolder.ReplicaID != 0 && ok {
+				log.Infof(ctx, "got new lease holder %s, so trying that next", leaseHolder)
+				if err := t.TryNext(leaseHolder); err != nil {
+					// It should be okay to just warn here, because even if this fails,
+					// we'll eventually connect to the right replica because of successive
+					// retries at higher levels.
+					log.Warningf(ctx, "couldn't set %s as next replica for RPC: %s", leaseHolder, err)
+				}
+			}
 		}
 		return true
 	}
