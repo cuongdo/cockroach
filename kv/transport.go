@@ -104,6 +104,9 @@ type Transport interface {
 	// as needed. Returns the address the RPC was sent to.
 	SendNext(chan BatchCall) string
 
+	// Prefer TODO: fill this in
+	TryNext(desc roachpb.ReplicaDescriptor)
+
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
 	Close()
@@ -141,16 +144,18 @@ func grpcTransportFactory(
 	splitHealthy(clients)
 
 	return &grpcTransport{
-		opts:           opts,
-		rpcContext:     rpcContext,
-		orderedClients: clients,
+		opts:              opts,
+		rpcContext:        rpcContext,
+		orderedClients:    clients,
+		allOrderedClients: clients,
 	}, nil
 }
 
 type grpcTransport struct {
-	opts           SendOptions
-	rpcContext     *rpc.Context
-	orderedClients []batchClient
+	opts              SendOptions
+	rpcContext        *rpc.Context
+	orderedClients    []batchClient
+	allOrderedClients []batchClient
 }
 
 func (gt *grpcTransport) IsExhausted() bool {
@@ -181,7 +186,6 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 	go func() {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
-
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
 			for i := range reply.Responses {
@@ -194,6 +198,26 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 	}()
 
 	return addr
+}
+
+func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) {
+	for i, c := range gt.orderedClients {
+		if c.args.Replica == replica {
+			t := gt.orderedClients[0]
+			gt.orderedClients[0] = c
+			gt.orderedClients[i] = t
+			return
+		}
+	}
+	// TODO: this is inefficent, so optimize it if it works
+	// TODO: this can cause infinite retries...
+	for _, c := range gt.allOrderedClients {
+		if c.args.Replica == replica {
+			gt.orderedClients = append([]batchClient{c}, gt.orderedClients...)
+			return
+		}
+	}
+	panic("couldn't find grpc client for replica " + replica.String())
 }
 
 func (*grpcTransport) Close() {
@@ -270,6 +294,9 @@ func (s *senderTransport) SendNext(done chan BatchCall) string {
 	}
 	done <- BatchCall{Reply: br}
 	return ""
+}
+
+func (s *senderTransport) TryNext(desc roachpb.ReplicaDescriptor) {
 }
 
 func (s *senderTransport) Close() {

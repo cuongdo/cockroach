@@ -954,7 +954,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 					log.Infof(context.TODO(), "application error: %s", call.Reply.Error)
 				}
 
-				if !ds.handlePerReplicaError(rangeID, call.Reply.Error) {
+				if !ds.handlePerReplicaError(rangeID, call.Reply.Error, transport) {
 					return call.Reply, nil
 				}
 
@@ -990,7 +990,10 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 // replicas is likely to produce different results. This method should
 // be called only once for each error as it may have side effects such
 // as updating caches.
-func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roachpb.Error) bool {
+func (ds *DistSender) handlePerReplicaError(
+	rangeID roachpb.RangeID,
+	pErr *roachpb.Error,
+	transport Transport) bool {
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.RangeNotFoundError:
 		return true
@@ -1000,9 +1003,7 @@ func (ds *DistSender) handlePerReplicaError(rangeID roachpb.RangeID, pErr *roach
 		if tErr.LeaseHolder != nil {
 			// If the replica we contacted knows the new lease holder, update the cache.
 			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
-
-			// TODO(bdarnell): Move the new lease holder to the head of the queue
-			// for the next retry.
+			transport.TryNext(*tErr.LeaseHolder)
 		}
 		return true
 	}
