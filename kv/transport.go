@@ -206,6 +206,7 @@ func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) {
 			t := gt.orderedClients[0]
 			gt.orderedClients[0] = c
 			gt.orderedClients[i] = t
+			log.Info(context.TODO(), "TryNext: found replica 1")
 			return
 		}
 	}
@@ -214,10 +215,12 @@ func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) {
 	for _, c := range gt.allOrderedClients {
 		if c.args.Replica == replica {
 			gt.orderedClients = append([]batchClient{c}, gt.orderedClients...)
+			log.Info(context.TODO(), "TryNext: found replica 2")
 			return
 		}
 	}
-	panic("couldn't find grpc client for replica " + replica.String())
+	log.Warningf(context.TODO(), "TryNext: couldn't find grpc client for replica %s (%+v)", replica.String(),
+		gt.allOrderedClients)
 }
 
 func (*grpcTransport) Close() {

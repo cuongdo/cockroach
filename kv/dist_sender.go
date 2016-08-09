@@ -949,12 +949,12 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 			err := call.Err
 			if err == nil {
 				if log.V(2) {
-					log.Infof(context.TODO(), "RPC reply: %+v", call.Reply)
+					log.Infof(opts.Context, "RPC reply: %+v", call.Reply)
 				} else if log.V(1) && call.Reply.Error != nil {
 					log.Infof(context.TODO(), "application error: %s", call.Reply.Error)
 				}
 
-				if !ds.handlePerReplicaError(rangeID, call.Reply.Error, transport) {
+				if !ds.handlePerReplicaError(opts.Context, rangeID, call.Reply.Error, transport) {
 					return call.Reply, nil
 				}
 
@@ -967,7 +967,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 				// information than a RangeNotFound).
 				err = call.Reply.Error.GoError()
 			} else if log.V(1) {
-				log.Warningf(context.TODO(), "RPC error: %s (%s)", err)
+				log.Warningf(opts.Context, "RPC error: %s (%s)", err)
 			}
 
 			// Send to additional replicas if available.
@@ -991,6 +991,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 // be called only once for each error as it may have side effects such
 // as updating caches.
 func (ds *DistSender) handlePerReplicaError(
+	ctx context.Context,
 	rangeID roachpb.RangeID,
 	pErr *roachpb.Error,
 	transport Transport) bool {
@@ -1001,6 +1002,7 @@ func (ds *DistSender) handlePerReplicaError(
 		return true
 	case *roachpb.NotLeaseHolderError:
 		if tErr.LeaseHolder != nil {
+			log.Info(ctx, "got new lease holder, so trying that next")
 			// If the replica we contacted knows the new lease holder, update the cache.
 			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
 			transport.TryNext(*tErr.LeaseHolder)
