@@ -39,11 +39,12 @@ type localTestClusterTransport struct {
 	latency time.Duration
 }
 
-func (l *localTestClusterTransport) SendNext(done chan BatchCall) {
+func (l *localTestClusterTransport) SendNext(done chan BatchCall) string {
 	if l.latency > 0 {
 		time.Sleep(l.latency)
 	}
 	l.Transport.SendNext(done)
+	return ""
 }
 
 // InitSenderForLocalTestCluster initializes a TxnCoordSender that can be used

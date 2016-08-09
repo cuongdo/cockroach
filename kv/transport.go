@@ -101,8 +101,8 @@ type Transport interface {
 	// SendNext sends the rpc (captured at creation time) to the next
 	// replica. May panic if the transport is exhausted. Should not
 	// block; the transport is responsible for starting other goroutines
-	// as needed.
-	SendNext(chan BatchCall)
+	// as needed. Returns the address the RPC was sent to.
+	SendNext(chan BatchCall) string
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -159,8 +159,8 @@ func (gt *grpcTransport) IsExhausted() bool {
 
 // SendNext invokes the specified RPC on the supplied client when the
 // client is ready. On success, the reply is sent on the channel;
-// otherwise an error is sent.
-func (gt *grpcTransport) SendNext(done chan BatchCall) {
+// otherwise an error is sent. Returns the address the RPC was sent to.
+func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 	client := gt.orderedClients[0]
 	gt.orderedClients = gt.orderedClients[1:]
 
@@ -175,13 +175,12 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 
 		reply, err := localServer.Batch(ctx, &client.args)
 		done <- BatchCall{Reply: reply, Err: err}
-		return
+		return addr
 	}
 
 	go func() {
 		ctx, cancel := gt.opts.contextWithTimeout()
 		defer cancel()
-		log.Infof(ctx, "sending request to %s: %+v", addr)
 
 		reply, err := client.client.Batch(ctx, &client.args)
 		if reply != nil {
@@ -193,6 +192,8 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) {
 		}
 		done <- BatchCall{Reply: reply, Err: err}
 	}()
+
+	return addr
 }
 
 func (*grpcTransport) Close() {
@@ -247,7 +248,7 @@ func (s *senderTransport) IsExhausted() bool {
 	return s.called
 }
 
-func (s *senderTransport) SendNext(done chan BatchCall) {
+func (s *senderTransport) SendNext(done chan BatchCall) string {
 	if s.called {
 		panic("called an exhausted transport")
 	}
@@ -268,6 +269,7 @@ func (s *senderTransport) SendNext(done chan BatchCall) {
 		log.Trace(ctx, "error: "+pErr.String())
 	}
 	done <- BatchCall{Reply: br}
+	return ""
 }
 
 func (s *senderTransport) Close() {
