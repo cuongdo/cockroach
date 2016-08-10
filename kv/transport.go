@@ -23,6 +23,7 @@ import (
 
 	"golang.org/x/net/context"
 
+	"github.com/cockroachdb/cockroach/gossip"
 	"github.com/cockroachdb/cockroach/internal/client"
 	"github.com/cockroachdb/cockroach/roachpb"
 	"github.com/cockroachdb/cockroach/rpc"
@@ -105,7 +106,7 @@ type Transport interface {
 	SendNext(chan BatchCall) string
 
 	// Prefer TODO: fill this in
-	TryNext(desc roachpb.ReplicaDescriptor)
+	TryNext(desc roachpb.ReplicaDescriptor) error
 
 	// Close is called when the transport is no longer needed. It may
 	// cancel any pending RPCs without writing any response to the channel.
@@ -200,27 +201,41 @@ func (gt *grpcTransport) SendNext(done chan BatchCall) string {
 	return addr
 }
 
-func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) {
+func (gt *grpcTransport) TryNext(replica roachpb.ReplicaDescriptor) error {
 	for i, c := range gt.orderedClients {
 		if c.args.Replica == replica {
-			t := gt.orderedClients[0]
-			gt.orderedClients[0] = c
-			gt.orderedClients[i] = t
-			log.Info(context.TODO(), "TryNext: found replica 1")
-			return
+			// Move the client to the beginning of the slice.
+			oc := make([]batchClient, len(gt.orderedClients))
+			oc = append(oc, gt.orderedClients[i])
+			oc = append(oc, gt.orderedClients[:i]...)
+			oc = append(oc, gt.orderedClients[i+1:]...)
+			log.Info(context.TODO(), "TryNext: found replica")
+			return nil
 		}
 	}
-	// TODO: this is inefficent, so optimize it if it works
-	// TODO: this can cause infinite retries...
-	for _, c := range gt.allOrderedClients {
-		if c.args.Replica == replica {
-			gt.orderedClients = append([]batchClient{c}, gt.orderedClients...)
-			log.Info(context.TODO(), "TryNext: found replica 2")
-			return
-		}
+	// There is no existing client for the given replica, so we must create one
+	// and prepend it to the existing slice of clients.
+	//
+	// TODO: This can cause infinite retries.
+	remoteAddr, err := gossip.GetNodeIDAddress(replica.NodeID)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't get address for ID %s", replica.NodeID)
 	}
-	log.Warningf(context.TODO(), "TryNext: couldn't find grpc client for replica %s (%+v)", replica.String(),
-		gt.allOrderedClients)
+	conn, err := gt.rpcContext.GRPCDial(remoteAddr)
+	if err != nil {
+		return errors.Wrapf(err, "couldn't dial server %s", remoteAddr)
+	}
+	argsCopy := gt.orderedClients[0].args
+	client := batchClient{
+		remoteAddr: remoteAddr,
+		conn:       conn,
+		client:     roachpb.NewInternalClient(conn),
+		args:       argsCopy,
+		healthy:    gt.rpcContext.IsConnHealthy(remoteAddr),
+	}
+	gt.orderedClients = append([]batchClient{client}, gt.orderedClients...)
+	log.Info(context.TODO(), "TryNext: created new client")
+	return nil
 }
 
 func (*grpcTransport) Close() {
@@ -299,7 +314,8 @@ func (s *senderTransport) SendNext(done chan BatchCall) string {
 	return ""
 }
 
-func (s *senderTransport) TryNext(desc roachpb.ReplicaDescriptor) {
+func (s *senderTransport) TryNext(desc roachpb.ReplicaDescriptor) error {
+	return errors.New("unimplemented")
 }
 
 func (s *senderTransport) Close() {

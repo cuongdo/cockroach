@@ -1005,7 +1005,9 @@ func (ds *DistSender) handlePerReplicaError(
 			log.Info(ctx, "got new lease holder, so trying that next")
 			// If the replica we contacted knows the new lease holder, update the cache.
 			ds.updateLeaseHolderCache(rangeID, *tErr.LeaseHolder)
-			transport.TryNext(*tErr.LeaseHolder)
+			if err := transport.TryNext(*tErr.LeaseHolder); err != nil {
+				log.Warningf(ctx, "couldn't set next replica to try: %s", err)
+			}
 		}
 		return true
 	}
