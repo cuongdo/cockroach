@@ -130,18 +130,23 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// checks from normal request machinery, (e.g. the command queue).
 		// Note that the command itself isn't traced, but usually the caller
 		// waiting for the result has an active Trace.
+		log.Errorf(context.TODO(), "CDO: %s: proposing lease request", replica)
 		ch, _, err := replica.proposeRaftCommand(context.Background(), ba)
 		if err != nil {
+			log.Errorf(context.TODO(), "CDO: failed to propose Raft command for range lease of %s: %s", replica, execPErr)
 			execPErr = roachpb.NewError(err)
 		} else {
 			// If the command was committed, wait for the range to apply it.
 			select {
 			case c := <-ch:
 				if c.Err != nil {
+					log.Errorf(context.TODO(), "CDO: couldn't apply range lease command for %s: %s", replica, c.Err)
 					if log.V(1) {
 						log.Infof(context.TODO(), "failed to acquire lease for replica %s: %s", replica, c.Err)
 					}
 					execPErr = c.Err
+				} else {
+					log.Errorf(context.TODO(), "CDO: %s: lease request succeeded", replica)
 				}
 			case <-replica.store.Stopper().ShouldQuiesce():
 				execPErr = roachpb.NewError(
@@ -230,12 +235,14 @@ func (r *Replica) requestLeaseLocked(timestamp hlc.Timestamp) <-chan *roachpb.Er
 	}
 	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(
 		repDesc.ReplicaID); ok {
+		log.Infof(context.TODO(), "CDO: %s: lease transfer in progress", r)
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(
 			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc))
 		return llChan
 	}
 	if r.store.IsDrainingLeases() {
+		log.Infof(context.TODO(), "CDO: %s: retired from active duty", r)
 		// We've retired from active duty.
 		llChan := make(chan *roachpb.Error, 1)
 		llChan <- roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc))

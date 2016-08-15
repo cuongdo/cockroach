@@ -248,7 +248,7 @@ func (et *evictionToken) EvictAndReplace(ctx context.Context, newDescs ...roachp
 				err = et.doReplace(newDescs...)
 				log.Tracef(ctx, "evicting cached range descriptor with %d replacements", len(newDescs))
 			} else {
-				log.Trace(ctx, "evicting cached range descriptor")
+				log.Trace(ctx, "evicting cached range descriptor (modified)")
 			}
 		}
 	})

@@ -1866,6 +1866,7 @@ func (s *Store) ReplicaCount() int {
 // be used to update the client transaction.
 func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	ctx = s.context(ctx)
+	log.Trace(ctx, "(*Store).Send")
 
 	for _, union := range ba.Requests {
 		arg := union.GetInner()
@@ -1978,6 +1979,7 @@ func (s *Store) Send(ctx context.Context, ba roachpb.BatchRequest) (br *roachpb.
 	s.mu.Lock()
 	retryOpts := s.ctx.RangeRetryOptions
 	s.mu.Unlock()
+	log.Trace(ctx, "(*Store).Send start retry loop")
 	for r := retry.Start(retryOpts); next(&r); {
 		// Get range and add command to the range for execution.
 		var err error

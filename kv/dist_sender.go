@@ -470,9 +470,12 @@ func (ds *DistSender) sendSingleRange(
 	// it to the front.
 	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
 		if leaseHolder, ok := ds.leaseHolderCache.Lookup(desc.RangeID); ok {
+			log.Tracef(ctx, "CDO: range=%d: found leader in cache: %s", desc.RangeID, leaseHolder)
 			if i := replicas.FindReplica(leaseHolder.StoreID); i >= 0 {
 				replicas.MoveToFront(i)
 			}
+		} else {
+			log.Tracef(ctx, "CDO: range=%d: couldn't find leader in cache", desc.RangeID)
 		}
 	}
 
@@ -667,9 +670,10 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			// Get range descriptor (or, when spanning range, descriptors). Our
 			// error handling below may clear them on certain errors, so we
 			// refresh (likely from the cache) on every retry.
-			log.Trace(ctx, "meta descriptor lookup")
+			log.Trace(ctx, "meta descriptor lookup start")
 			var err error
 			desc, needAnother, evictToken, err = ds.getDescriptors(ctx, rs, evictToken, isReverse)
+			log.Trace(ctx, "meta descriptor lookup end")
 
 			// getDescriptors may fail retryably if, for example, the first
 			// range isn't available via Gossip. Assume that all errors at
@@ -719,9 +723,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				return desc.ContainsKey(rs.Key)
 			}
 			if !includesFrontOfCurSpan(desc) {
+				log.Trace(ctx, "evict 1 start")
 				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
+				log.Trace(ctx, "evict 1 done")
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
 				continue
@@ -752,7 +758,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 			}
 
 			log.VTracef(1, ctx, "reply error %s: %s", ba, pErr)
-
+			log.Tracef(ctx, "reply error %s: %s", ba, pErr)
 			// Error handling: If the error indicates that our range
 			// descriptor is out of date, evict it from the cache and try
 			// again. Errors that apply only to a single replica were
@@ -767,9 +773,11 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 				// they're all down, or we're using an out-of-date range
 				// descriptor. Invalidate the cache and try again with the new
 				// metadata.
+				log.Trace(ctx, "evict 2 start")
 				if err := evictToken.Evict(ctx); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
+				log.Trace(ctx, "evict 2 done")
 				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Range descriptor might be out of date - evict it. This is
@@ -789,12 +797,15 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 
 					}
 				}
+				log.Trace(ctx, "before EvictAndReplace")
 				// Same as Evict() if replacements is empty.
 				if err := evictToken.EvictAndReplace(ctx, replacements...); err != nil {
 					return nil, roachpb.NewError(err), false
 				}
+				log.Trace(ctx, "after EvictAndReplace")
 				// On addressing errors, don't backoff; retry immediately.
 				r.Reset()
+				log.Tracef(ctx, "txn error: %s", err)
 				if log.V(1) {
 					log.Warning(ctx, tErr)
 				}
@@ -818,6 +829,7 @@ func (ds *DistSender) sendChunk(ctx context.Context, ba roachpb.BatchRequest) (*
 		}
 
 		ba.Txn.Update(curReply.Txn)
+		log.Trace(ctx, "ba.Txn.Update")
 
 		if br == nil {
 			// First response from a Range.
@@ -1036,6 +1048,7 @@ func (ds *DistSender) sendToReplicas(opts SendOptions,
 
 			// Send to additional replicas if available.
 			if !transport.IsExhausted() {
+				log.Infof(opts.Context, "error, trying next peer: %s", err)
 				log.Tracef(opts.Context, "error, trying next peer: %s", err)
 				pending++
 				transport.SendNext(done)
@@ -1081,12 +1094,12 @@ func (ds *DistSender) updateLeaseHolderCache(
 	if log.V(1) {
 		if oldLeaseHolder, ok := ds.leaseHolderCache.Lookup(rangeID); ok {
 			if (newLeaseHolder == roachpb.ReplicaDescriptor{}) {
-				log.Infof(context.TODO(), "range %d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
+				log.Infof(context.TODO(), "CDO: range=%d: evicting cached lease holder %+v", rangeID, oldLeaseHolder)
 			} else if newLeaseHolder != oldLeaseHolder {
-				log.Infof(context.TODO(), "range %d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
+				log.Infof(context.TODO(), "CDO: range=%d: replacing cached lease holder %+v with %+v", rangeID, oldLeaseHolder, newLeaseHolder)
 			}
 		} else {
-			log.Infof(context.TODO(), "range %d: caching new lease holder %+v", rangeID, newLeaseHolder)
+			log.Infof(context.TODO(), "CDO: range=%d: caching new lease holder %+v", rangeID, newLeaseHolder)
 		}
 	}
 	ds.leaseHolderCache.Update(rangeID, newLeaseHolder)

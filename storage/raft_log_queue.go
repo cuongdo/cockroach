@@ -93,10 +93,13 @@ func getTruncatableIndexes(r *Replica) (uint64, uint64, error) {
 	// and end transaction operations. If the estimated raft log size becomes
 	// larger than the replica size, we're better off recovering the replica
 	// using a snapshot.
-	targetSize := r.mu.state.Stats.Total()
-	if targetSize > r.mu.maxBytes {
-		targetSize = r.mu.maxBytes
-	}
+	/*
+		targetSize := r.mu.state.Stats.Total()
+		if targetSize > r.mu.maxBytes {
+			targetSize = r.mu.maxBytes
+		}
+	*/
+	targetSize := r.mu.maxBytes
 	firstIndex, err := r.FirstIndex()
 	r.mu.Unlock()
 	if err != nil {

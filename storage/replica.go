@@ -497,6 +497,8 @@ func (r *Replica) setReplicaIDLocked(replicaID roachpb.ReplicaID) error {
 	// this new incarnation.
 	if previousReplicaID != 0 {
 		// propose pending commands under new replicaID
+		log.Infof(context.TODO(), "REFRESHING pending commands for range %d, replica %d->%d",
+			r.RangeID, previousReplicaID, replicaID)
 		if err := r.refreshPendingCmdsLocked(reasonReplicaIDChanged, 0); err != nil {
 			return err
 		}
@@ -641,6 +643,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 		select {
 		case pErr := <-llChan:
 			if pErr != nil {
+				log.Tracef(ctx, "%s: lease acquisition failed 1: %v", r, pErr)
 				// Getting a LeaseRejectedError back means someone else got there
 				// first, or the lease request was somehow invalid due to a
 				// concurrent change. Convert the error to a NotLeaseHolderError.
@@ -655,6 +658,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) *roachpb.Error {
 			}
 			continue
 		case <-ctx.Done():
+			log.Tracef(ctx, "%s: lease acquisition failed 2: %v", r, ctx.Err())
 			if log.V(2) {
 				log.Infof(ctx, "%s: lease acquisition failed: %v", r, ctx.Err())
 			}
@@ -1301,6 +1305,11 @@ func (r *Replica) addWriteCmd(
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	log.Trace(ctx, "command queue")
+	txnID := "(none)"
+	if ba.Txn != nil {
+		txnID = ba.Txn.ID.String()
+	}
+	log.Infof(ctx, "batch request range=%s txn=%s", ba.RangeID.String(), txnID)
 	endCmdsFunc, err := r.beginCmds(ctx, &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)

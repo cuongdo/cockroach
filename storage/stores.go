@@ -139,6 +139,7 @@ func (ls *Stores) VisitStores(visitor func(s *Store) error) error {
 func (ls *Stores) Send(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If we aren't given a Replica, then a little bending over
 	// backwards here. This case applies exclusively to unittests.
+	log.Trace(ctx, "(*Stores).Send")
 	if ba.RangeID == 0 || ba.Replica.StoreID == 0 {
 		rs, err := keys.Range(ba)
 		if err != nil {
