@@ -1305,11 +1305,6 @@ func (r *Replica) addWriteCmd(
 	// timestamp cache is only updated after preceding commands have
 	// been run to successful completion.
 	log.Trace(ctx, "command queue")
-	txnID := "(none)"
-	if ba.Txn != nil {
-		txnID = ba.Txn.ID.String()
-	}
-	log.Infof(ctx, "batch request range=%s txn=%s", ba.RangeID.String(), txnID)
 	endCmdsFunc, err := r.beginCmds(ctx, &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)

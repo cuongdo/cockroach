@@ -139,8 +139,7 @@ func logRaftReady(ctx context.Context, prefix fmt.Stringer, ready raft.Ready) {
 			fmt.Fprintf(&buf, "  Snapshot updated: %.200s\n", ready.Snapshot.String())
 		}
 		for i, m := range ready.Messages {
-			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
-				i, raft.DescribeMessage(m, raftEntryFormatter))
+			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n", i, m.Type)
 		}
 		log.Infof(ctx, "%s raft ready\n%s", prefix, buf.String())
 	}

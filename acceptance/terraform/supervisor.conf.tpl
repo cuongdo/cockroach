@@ -20,6 +20,9 @@ supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 [supervisorctl]
 serverurl=http://127.0.0.1:9001 ; use an http:// url to specify an inet socket
 
+[supervisord]
+logfile_backups=0
+
 [program:cockroach]
 directory=%(here)s
 command=%(here)s/cockroach start --logtostderr=true ${stores} --insecure --join=${join_address} --cache=2GiB ${cockroach_flags}
