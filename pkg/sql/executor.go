@@ -1331,6 +1331,7 @@ func checkResultType(typ parser.Type) error {
 	case parser.TypeTimestamp:
 	case parser.TypeTimestampTZ:
 	case parser.TypeInterval:
+	case parser.TypeArray:
 	case parser.TypePlaceholder:
 		return errors.Errorf("could not determine data type of %s", typ)
 	default:
