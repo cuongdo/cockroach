@@ -81,7 +81,11 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 		}
 
 	case `EXTRA_FLOAT_DIGITS`:
-		// These settings are sent by the JDBC driver but we silently ignore them.
+		// These settings are sent by the JDBC driver, but we silently ignore them.
+
+	case `CLIENT_MIN_MESSAGES`:
+	case `STANDARD_CONFORMING_STRINGS`:
+		// These settings are sent by ActiveRecord, but we silently ignore them.
 
 	case `DIST_SQL`:
 		s, err := p.getStringVal(name, typedValues)
