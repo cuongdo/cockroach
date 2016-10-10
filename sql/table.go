@@ -131,6 +131,10 @@ var _ SchemaAccessor = &planner{}
 func (p *planner) getTableOrViewDesc(tn *parser.TableName) (*sqlbase.TableDescriptor, error) {
 	virtual, err := p.virtualSchemas().getVirtualTableDesc(tn)
 	if err != nil || virtual != nil {
+		_, ok := err.(*sqlbase.ErrUndefinedTable)
+		if ok {
+			return nil, nil
+		}
 		return virtual, err
 	}
 
@@ -423,7 +427,7 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 	if !ok {
 		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	return table.NormalizeWithDatabaseName(p.session.Database)
+	return table.NormalizeWithSearchPath(p.session.SearchPath, p.tableOrViewExists)
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.
@@ -465,7 +469,7 @@ func (p *planner) writeTableDesc(tableDesc *sqlbase.TableDescriptor) error {
 // The pattern must be already normalized using NormalizeTablePattern().
 func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableNames, error) {
 	if t, ok := pattern.(*parser.TableName); ok {
-		if err := t.QualifyWithDatabase(p.session.Database); err != nil {
+		if err := t.QualifyWithSearchPath(p.session.SearchPath, p.tableOrViewExists); err != nil {
 			return nil, err
 		}
 		return parser.TableNames{*t}, nil
@@ -487,4 +491,12 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 		return nil, err
 	}
 	return tableNames, nil
+}
+
+func (p *planner) tableOrViewExists(tn *parser.TableName) (bool, error) {
+	desc, err := p.getTableOrViewDesc(tn)
+	if err != nil {
+		return false, err
+	}
+	return desc != nil, nil
 }

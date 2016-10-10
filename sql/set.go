@@ -64,6 +64,7 @@ func (p *planner) Set(n *parser.Set) (planNode, error) {
 			}
 		}
 		p.session.Database = dbName
+		p.session.SearchPath = []string{"pg_catalog", dbName}
 
 	case `SYNTAX`:
 		s, err := p.getStringVal(name, typedValues)

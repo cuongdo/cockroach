@@ -73,6 +73,20 @@ func (nt *NormalizableTableName) NormalizeWithDatabaseName(database string) (*Ta
 	return tn, nil
 }
 
+// NormalizeWithSearchPath combines Normalize and QualifyWithSearchPath.
+func (nt *NormalizableTableName) NormalizeWithSearchPath(
+	searchPath []string, tableOrViewExists tableOrViewExistsFn,
+) (*TableName, error) {
+	tn, err := nt.Normalize()
+	if err != nil {
+		return nil, err
+	}
+	if err := tn.QualifyWithSearchPath(searchPath, tableOrViewExists); err != nil {
+		return nil, err
+	}
+	return tn, nil
+}
+
 // TableName asserts that the table name has been previously normalized.
 func (nt *NormalizableTableName) TableName() *TableName {
 	return nt.TableNameReference.(*TableName)
@@ -129,7 +143,7 @@ func (t *TableName) Database() string {
 // normalizeTableNameAsValue transforms an UnresolvedName to a TableName.
 // The resulting TableName may lack a db qualification. This is
 // valid if e.g. the name refers to a in-query table alias
-// (AS) or is qualified later using the QualifyWithDatabase method.
+// (AS) or is qualified later using the QualifyWithSearchPath method.
 func (n UnresolvedName) normalizeTableNameAsValue() (TableName, error) {
 	if len(n) == 0 || len(n) > 2 {
 		return TableName{}, fmt.Errorf("invalid table name: %q", n)
@@ -171,18 +185,54 @@ func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
 	return &tn, nil
 }
 
+type tableOrViewExistsFn func(*TableName) (bool, error)
+
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
-// It transforms:
+//
+// This transforms:
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithDatabase(database string) error {
 	if t.DatabaseName != "" {
 		return nil
 	}
+
 	if database == "" {
 		return fmt.Errorf("no database specified: %q", t)
 	}
 	t.DatabaseName = Name(database)
+	return nil
+}
+
+// QualifyWithSearchPath adds an indirection for the database, if it's missing.
+// This returns the first database in searchPath to have a view or table that
+// has the given name.
+//
+// TODO(cuongdo): When the table doesn't exist in any database in searchPath,
+// this has the unexpected behavior of returning nil and populating
+// t.DatabaseName with the last entry in searchPath. The intent is for the
+// caller to return the appropriate "table does not exist" error, which does
+// not exist in this package.
+//
+// This transforms:
+// table       -> database.table
+// table@index -> database.table@index
+func (t *TableName) QualifyWithSearchPath(
+	searchPath []string, tableOrViewExists tableOrViewExistsFn,
+) error {
+	if t.DatabaseName != "" {
+		return nil
+	}
+	for _, database := range searchPath {
+		t.DatabaseName = Name(database)
+		exists, err := tableOrViewExists(t)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
+	}
 	return nil
 }
 
