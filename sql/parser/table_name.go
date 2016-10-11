@@ -185,6 +185,7 @@ func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
 	return &tn, nil
 }
 
+// TODO BEFORE PR: move to a better place and possibly think of better name
 type tableOrViewExistsFn func(*TableName) (bool, error)
 
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
