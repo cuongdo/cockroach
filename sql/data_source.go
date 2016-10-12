@@ -225,7 +225,7 @@ func (p *planner) getDataSource(
 	switch t := src.(type) {
 	case *parser.NormalizableTableName:
 		// Usual case: a table.
-		tn, err := t.NormalizeWithSearchPath(p.session.SearchPath, p.tableOrViewExists)
+		tn, err := t.NormalizeWithSearchPath(p.session.SearchPath, p)
 		if err != nil {
 			return planDataSource{}, err
 		}

@@ -427,7 +427,7 @@ func (p *planner) getAliasedTableName(n parser.TableExpr) (*parser.TableName, er
 	if !ok {
 		return nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-	return table.NormalizeWithSearchPath(p.session.SearchPath, p.tableOrViewExists)
+	return table.NormalizeWithSearchPath(p.session.SearchPath, p)
 }
 
 // notifySchemaChange implements the SchemaAccessor interface.
@@ -469,7 +469,7 @@ func (p *planner) writeTableDesc(tableDesc *sqlbase.TableDescriptor) error {
 // The pattern must be already normalized using NormalizeTablePattern().
 func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableNames, error) {
 	if t, ok := pattern.(*parser.TableName); ok {
-		if err := t.QualifyWithSearchPath(p.session.SearchPath, p.tableOrViewExists); err != nil {
+		if err := t.QualifyWithSearchPath(p.session.SearchPath, p); err != nil {
 			return nil, err
 		}
 		return parser.TableNames{*t}, nil
@@ -493,10 +493,13 @@ func (p *planner) expandTableGlob(pattern parser.TablePattern) (parser.TableName
 	return tableNames, nil
 }
 
-func (p *planner) tableOrViewExists(tn *parser.TableName) (bool, error) {
+// TableOrViewExists implements the existenceChecker interface.
+func (p *planner) TableOrViewExists(tn *parser.TableName) (bool, error) {
 	desc, err := p.getTableOrViewDesc(tn)
 	if err != nil {
 		return false, err
 	}
 	return desc != nil, nil
 }
+
+var _ parser.ExistenceChecker = &planner{}

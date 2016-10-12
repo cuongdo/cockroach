@@ -69,7 +69,7 @@ func (ie InternalExecutor) GetTableSpan(
 
 // getTableID retrieves the table ID for the specified table.
 func getTableID(p *planner, tn *parser.TableName) (sqlbase.ID, error) {
-	if err := tn.QualifyWithSearchPath(p.session.SearchPath, p.tableOrViewExists); err != nil {
+	if err := tn.QualifyWithSearchPath(p.session.SearchPath, p); err != nil {
 		return 0, err
 	}
 

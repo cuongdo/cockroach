@@ -21,6 +21,12 @@ import (
 	"fmt"
 )
 
+// ExistenceChecker provides a way to check whether the provided TableName
+// exists as a table or view.
+type ExistenceChecker interface {
+	TableOrViewExists(*TableName) (bool, error)
+}
+
 // Table names are used in statements like CREATE TABLE,
 // INSERT INTO, etc.
 // General syntax:
@@ -75,13 +81,13 @@ func (nt *NormalizableTableName) NormalizeWithDatabaseName(database string) (*Ta
 
 // NormalizeWithSearchPath combines Normalize and QualifyWithSearchPath.
 func (nt *NormalizableTableName) NormalizeWithSearchPath(
-	searchPath []string, tableOrViewExists tableOrViewExistsFn,
+	searchPath []string, checker ExistenceChecker,
 ) (*TableName, error) {
 	tn, err := nt.Normalize()
 	if err != nil {
 		return nil, err
 	}
-	if err := tn.QualifyWithSearchPath(searchPath, tableOrViewExists); err != nil {
+	if err := tn.QualifyWithSearchPath(searchPath, checker); err != nil {
 		return nil, err
 	}
 	return tn, nil
@@ -186,7 +192,6 @@ func (n UnresolvedName) NormalizeTableName() (*TableName, error) {
 }
 
 // TODO BEFORE PR: move to a better place and possibly think of better name
-type tableOrViewExistsFn func(*TableName) (bool, error)
 
 // QualifyWithDatabase adds an indirection for the database, if it's missing.
 //
@@ -219,14 +224,14 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 // table       -> database.table
 // table@index -> database.table@index
 func (t *TableName) QualifyWithSearchPath(
-	searchPath []string, tableOrViewExists tableOrViewExistsFn,
+	searchPath []string, checker ExistenceChecker,
 ) error {
 	if t.DatabaseName != "" {
 		return nil
 	}
 	for _, database := range searchPath {
 		t.DatabaseName = Name(database)
-		exists, err := tableOrViewExists(t)
+		exists, err := checker.TableOrViewExists(t)
 		if err != nil {
 			return err
 		}
