@@ -223,9 +223,7 @@ func (t *TableName) QualifyWithDatabase(database string) error {
 // This transforms:
 // table       -> database.table
 // table@index -> database.table@index
-func (t *TableName) QualifyWithSearchPath(
-	searchPath []string, checker ExistenceChecker,
-) error {
+func (t *TableName) QualifyWithSearchPath(searchPath []string, checker ExistenceChecker) error {
 	if t.DatabaseName != "" {
 		return nil
 	}
