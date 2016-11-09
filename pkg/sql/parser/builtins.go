@@ -957,22 +957,26 @@ var Builtins = map[string][]Builtin{
 	"current_schemas": {
 		Builtin{
 			Types:      ArgTypes{TypeBool},
-			ReturnType: TypeArray,
+			ReturnType: TypeStringArray,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
 				if args[0] == DNull {
 					return DNull, nil
 				}
-				var schemas DArray
+				schemas := NewDArray(TypeString)
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						schemas = append(schemas, NewDString(p))
+						if err := schemas.AppendString(p); err != nil {
+							return nil, err
+						}
 					}
 				}
 				if len(ctx.Database) != 0 {
-					schemas = append(schemas, NewDString(ctx.Database))
+					if err := schemas.AppendString(ctx.Database); err != nil {
+						return nil, err
+					}
 				}
-				return &schemas, nil
+				return schemas, nil
 			},
 		},
 	},
