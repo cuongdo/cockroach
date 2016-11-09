@@ -1258,17 +1258,17 @@ var Builtins = map[string][]Builtin{
 			Types:      ArgTypes{TypeBool},
 			ReturnType: TypeArray,
 			fn: func(ctx *EvalContext, args DTuple) (Datum, error) {
-				var schemas DArray
+				schemas := NewDArray(TypeString)
 				showImplicitSchemas := args[0].(*DBool)
 				if showImplicitSchemas == DBoolTrue {
 					for _, p := range ctx.SearchPath {
-						schemas = append(schemas, NewDString(p))
+						schemas.Array = append(schemas.Array, NewDString(p))
 					}
 				}
 				if len(ctx.Database) != 0 {
-					schemas = append(schemas, NewDString(ctx.Database))
+					schemas.Array = append(schemas.Array, NewDString(ctx.Database))
 				}
-				return &schemas, nil
+				return schemas, nil
 			},
 		},
 	},
