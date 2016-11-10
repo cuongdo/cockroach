@@ -1505,6 +1505,17 @@ func (d *DArray) AppendString(s string) error {
 	return nil
 }
 
+// AppendInt64 appends an int64 to the array, whose parameterized type must be
+// TypeInt.
+func (d *DArray) AppendInt64(i int64) error {
+	if d.ParamTyp != TypeInt {
+		return errors.Errorf("cannot append int64 to a DArray containing %+v",
+			d.ParamTyp)
+	}
+	d.Array = append(d.Array, NewDInt(DInt(i)))
+	return nil
+}
+
 // Temporary workaround for #3633, allowing comparisons between
 // heterogeneous types.
 // TODO(nvanbenschoten) Now that typing is improved, can we get rid of this?

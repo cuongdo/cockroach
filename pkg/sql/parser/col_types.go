@@ -261,11 +261,11 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func arrayOf(colType ColumnType) ColumnType {
+func arrayOf(colType ColumnType) (ColumnType, error) {
 	if colType == intColTypeInt {
-		return arrayColTypeIntArray
+		return arrayColTypeIntArray, nil
 	}
-	return nil
+	return nil, errors.Errorf("cannot make array for column type %s", colType)
 }
 
 func (node *BoolColType) String() string        { return AsString(node) }

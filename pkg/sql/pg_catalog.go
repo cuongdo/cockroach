@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -379,8 +378,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 	conislocal BOOL,
 	coninhcount INT,
 	connoinherit BOOL,
-	conkey STRING,
-	confkey STRING,
+	conkey INT[],
+	confkey INT[],
 	conpfeqop STRING,
 	conppeqop STRING,
 	conffeqop STRING,
@@ -427,7 +426,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 						oid = h.PrimaryKeyConstraintOid(db, table, c.Index)
 						contype = conTypePKey
 						conindid = h.IndexOid(db, table, c.Index)
-						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
+						var err error
+						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+						if err != nil {
+							return err
+						}
 
 					case sqlbase.ConstraintTypeFK:
 						referencedDB, _ := tableLookup(c.ReferencedTable.ID)
@@ -442,14 +445,25 @@ CREATE TABLE pg_catalog.pg_constraint (
 						confupdtype = fkActionNone
 						confdeltype = fkActionNone
 						confmatchtype = fkMatchTypeSimple
-						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
-						confkey = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
+						var err error
+						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+						if err != nil {
+							return err
+						}
+						confkey, err = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
+						if err != nil {
+							return err
+						}
 
 					case sqlbase.ConstraintTypeUnique:
 						oid = h.UniqueConstraintOid(db, table, c.Index)
 						contype = conTypeUnique
 						conindid = h.IndexOid(db, table, c.Index)
-						conkey = colIDArrayToDatum(c.Index.ColumnIDs)
+						var err error
+						conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
+						if err != nil {
+							return err
+						}
 
 					case sqlbase.ConstraintTypeCheck:
 						oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
@@ -496,22 +510,19 @@ CREATE TABLE pg_catalog.pg_constraint (
 	},
 }
 
-// colIDArrayToDatum returns a mock int[] as a DString for a slice of ColumnIDs.
-// TODO(nvanbenschoten) use real int arrays when they are supported.
-func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
+// colIDArrayToDatum returns an int[] containing the ColumnIDs, or NULL if there
+// are no ColumnIDs.
+func colIDArrayToDatum(arr []sqlbase.ColumnID) (parser.Datum, error) {
 	if len(arr) == 0 {
-		return parser.DNull
+		return parser.DNull, nil
 	}
-	var buf bytes.Buffer
-	buf.WriteByte('{')
-	for i, val := range arr {
-		if i > 0 {
-			buf.WriteByte(',')
+	d := parser.NewDArray(parser.TypeInt)
+	for _, val := range arr {
+		if err := d.AppendInt64(int64(val)); err != nil {
+			return nil, err
 		}
-		buf.WriteString(strconv.Itoa(int(val)))
 	}
-	buf.WriteByte('}')
-	return parser.NewDString(buf.String())
+	return d, nil
 }
 
 var (
