@@ -104,10 +104,12 @@ func RandDatum(rng *rand.Rand, typ ColumnType_Kind, null bool) parser.Datum {
 	case ColumnType_TIMESTAMPTZ:
 		return &parser.DTimestampTZ{Time: time.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case ColumnType_INT_ARRAY:
+		l := rng.Intn(10)
 		d := parser.NewDArray(parser.TypeInt)
-		d.Array = make([]parser.Datum, rng.Intn(10))
-		for i := range d.Array {
-			d.Array[i] = parser.NewDInt(parser.DInt(rng.Int63()))
+		for i := 0; i < l; i++ {
+			if err := d.AppendInt(rng.Int63()); err != nil {
+				panic(fmt.Sprintf("couldn't append int to DArray: %v", err))
+			}
 		}
 		return d
 	default:

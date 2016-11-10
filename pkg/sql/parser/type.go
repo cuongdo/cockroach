@@ -242,9 +242,9 @@ func (TPlaceholder) FamilyEqual(other Type) bool {
 func (t TPlaceholder) Size() (uintptr, bool) { panic("TPlaceholder.Size() is undefined") }
 
 // TArray is the type of a DArray.
-type tArray struct{ Typ Type }
+type tArray struct{ ParamTyp Type }
 
-func (a tArray) String() string { return a.Typ.String() + "[]" }
+func (a tArray) String() string { return a.ParamTyp.String() + "[]" }
 
 // Equal implements the Type interface.
 func (a tArray) Equal(other Type) bool {
@@ -252,7 +252,7 @@ func (a tArray) Equal(other Type) bool {
 	if !ok {
 		return false
 	}
-	return a.Typ == oa.Typ
+	return a.ParamTyp.Equal(oa.ParamTyp)
 }
 
 // FamilyEqual implements the Type interface.

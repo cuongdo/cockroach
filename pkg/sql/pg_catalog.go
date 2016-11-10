@@ -501,11 +501,13 @@ func colIDArrayToDatum(arr []sqlbase.ColumnID) parser.Datum {
 	if len(arr) == 0 {
 		return parser.DNull
 	}
-	d := parser.DArray{Typ: parser.TypeIntArray}
+	d := parser.NewDArray(parser.TypeInt)
 	for _, val := range arr {
-		d.Array = append(d.Array, parser.NewDInt(parser.DInt(val)))
+		if err := d.AppendInt(int64(val)); err != nil {
+			return parser.DNull
+		}
 	}
-	return &d
+	return d
 }
 
 var (

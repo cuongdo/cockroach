@@ -1364,25 +1364,48 @@ func (d dNull) Size() uintptr {
 // DArray is the array Datum. Any Datum inserted into a DArray are treated as
 // text during serialization.
 type DArray struct {
-	Typ   Type
-	Array []Datum
+	paramTyp Type
+	Array    []Datum
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
-func NewDArray(typ Type) *DArray {
-	switch typ {
-	case TypeInt:
-		return &DArray{Typ: TypeIntArray}
-	case TypeString:
-		return &DArray{Typ: TypeStringArray}
-	default:
-		panic(fmt.Sprintf("invalid type for DArray %s", typ))
+func NewDArray(paramTyp Type) *DArray {
+	if paramTyp != TypeInt && paramTyp != TypeString {
+		panic(fmt.Sprintf("invalid type for DArray %s", paramTyp))
 	}
+	return &DArray{paramTyp: paramTyp}
 }
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DArray) ResolvedType() Type {
-	return d.Typ
+	switch d.paramTyp {
+	case TypeInt:
+		return TypeIntArray
+	case TypeString:
+		return TypeStringArray
+	default:
+		panic(fmt.Sprintf("invalid parameterized type for DArray: %s", d.paramTyp))
+	}
+}
+
+// AppendInt appends given int to the array. This is only valid for DArrays
+// containing DInts.
+func (d *DArray) AppendInt(v int64) error {
+	if d.paramTyp != TypeInt {
+		return errors.Errorf("can't insert int into %s", d.ResolvedType())
+	}
+	d.Array = append(d.Array, NewDInt(DInt(v)))
+	return nil
+}
+
+// AppendString appends given string the array. This is only valid for DArrays
+// containing DStrings.
+func (d *DArray) AppendString(v string) error {
+	if d.paramTyp != TypeString {
+		return errors.Errorf("can't append string to %s", d.ResolvedType())
+	}
+	d.Array = append(d.Array, NewDString(v))
+	return nil
 }
 
 // Compare implements the Datum interface.
@@ -1395,7 +1418,7 @@ func (d *DArray) Compare(other Datum) int {
 	if !ok {
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if d.Typ != v.Typ {
+	if d.paramTyp != v.paramTyp {
 		panic(makeUnsupportedComparisonMessage(d, v))
 	}
 	n := len(d.Array)
@@ -1429,7 +1452,7 @@ func (d *DArray) HasPrev() bool {
 
 // Prev implements the Datum interface.
 func (d *DArray) Prev() Datum {
-	n := DArray{Typ: d.Typ}
+	n := DArray{paramTyp: d.paramTyp}
 	n.Array = make([]Datum, len(d.Array))
 	copy(n.Array, d.Array)
 	for i := len(n.Array) - 1; i >= 0; i-- {
@@ -1453,7 +1476,7 @@ func (d *DArray) HasNext() bool {
 
 // Next implements the Datum interface.
 func (d *DArray) Next() Datum {
-	n := DArray{Typ: d.Typ}
+	n := DArray{paramTyp: d.paramTyp}
 	n.Array = make([]Datum, len(d.Array))
 	copy(n.Array, d.Array)
 	for i := len(n.Array) - 1; i >= 0; i-- {

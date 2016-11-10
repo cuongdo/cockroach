@@ -262,10 +262,12 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 }
 
 func arrayOf(colType ColumnType) ColumnType {
-	if colType == intColTypeInt {
+	switch colType {
+	case intColTypeInt:
 		return arrayColTypeIntArray
+	default:
+		return nil
 	}
-	return nil
 }
 
 func (node *BoolColType) String() string        { return AsString(node) }
