@@ -2966,7 +2966,12 @@ typename:
   simple_typename opt_array_bounds
   {
     if $2.bool() {
-      $$.val = arrayOf($1.colType())
+      var err error
+      $$.val, err = arrayOf($1.colType())
+      if err != nil {
+        sqllex.Error(err.Error())
+        return 1
+      }
     } else {
       $$.val = $1.colType()
     }
