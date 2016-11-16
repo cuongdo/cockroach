@@ -397,7 +397,7 @@ func (u *sqlSymUnion) window() Window {
 %type <[]*Order> sortby_list
 %type <IndexElemList> index_params
 %type <NameList> name_list opt_name_list
-%type <bool> opt_array_bounds
+%type <Exprs> opt_array_bounds
 %type <*From> from_clause update_from_clause
 %type <TableExprs> from_list
 %type <UnresolvedNames> qualified_name_list
@@ -2965,9 +2965,9 @@ where_clause:
 typename:
   simple_typename opt_array_bounds
   {
-    if $2.bool() {
+    if $2.val != nil {
       var err error
-      $$.val, err = arrayOf($1.colType())
+      $$.val, err = arrayOf($1.colType(), $2.exprs())
       if err != nil {
         sqllex.Error(err.Error())
         return 1
@@ -2981,9 +2981,9 @@ typename:
 | simple_typename ARRAY { return unimplementedWithIssue(sqllex, 2115) }
 
 opt_array_bounds:
-  opt_array_bounds '[' ']' { $$.val = true; }
+  opt_array_bounds '[' ']' { $$.val = Exprs{NewDInt(DInt(-1))}; }
 | opt_array_bounds '[' ICONST ']' { return unimplementedWithIssue(sqllex, 2115) }
-| /* EMPTY */ { $$.val = false; }
+| /* EMPTY */ { $$.val = nil; }
 
 simple_typename:
   numeric

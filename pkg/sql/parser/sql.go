@@ -7697,9 +7697,9 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-2 : sqlpt+1]
 		//line sql.y:2965
 		{
-			if sqlDollar[2].union.bool() {
+			if sqlDollar[2].union.val != nil {
 				var err error
-				sqlVAL.union.val, err = arrayOf(sqlDollar[1].union.colType())
+				sqlVAL.union.val, err = arrayOf(sqlDollar[1].union.colType(), sqlDollar[2].union.exprs())
 				if err != nil {
 					sqllex.Error(err.Error())
 					return 1
@@ -7724,7 +7724,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-3 : sqlpt+1]
 		//line sql.y:2982
 		{
-			sqlVAL.union.val = true
+			sqlVAL.union.val = Exprs{NewDInt(DInt(-1))}
 		}
 	case 471:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]
@@ -7736,7 +7736,7 @@ sqldefault:
 		sqlDollar = sqlS[sqlpt-0 : sqlpt+1]
 		//line sql.y:2984
 		{
-			sqlVAL.union.val = false
+			sqlVAL.union.val = nil
 		}
 	case 478:
 		sqlDollar = sqlS[sqlpt-4 : sqlpt+1]

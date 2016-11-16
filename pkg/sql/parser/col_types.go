@@ -244,16 +244,12 @@ func (node *BytesColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-// Pre-allocated immutable array column types.
-var (
-	arrayColTypeIntArray = &ArrayColType{Name: "INT[]", ParamType: intColTypeInt}
-)
-
 // ArrayColType represents an ARRAY column type.
 type ArrayColType struct {
 	Name string
 	// ParamTyp is the type of the elements in this array.
-	ParamType ColumnType
+	ParamType   ColumnType
+	BoundsExprs Exprs
 }
 
 // Format implements the NodeFormatter interface.
@@ -261,9 +257,9 @@ func (node *ArrayColType) Format(buf *bytes.Buffer, f FmtFlags) {
 	buf.WriteString(node.Name)
 }
 
-func arrayOf(colType ColumnType) (ColumnType, error) {
+func arrayOf(colType ColumnType, boundsExprs Exprs) (ColumnType, error) {
 	if colType == intColTypeInt {
-		return arrayColTypeIntArray, nil
+		return &ArrayColType{Name: "INT[]", ParamType: intColTypeInt, BoundsExprs: boundsExprs}, nil
 	}
 	return nil, errors.Errorf("cannot make array for column type %s", colType)
 }

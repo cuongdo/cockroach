@@ -116,6 +116,18 @@ func MakeColumnDefDescs(d *parser.ColumnTableDef) (*ColumnDescriptor, *IndexDesc
 	case *parser.ArrayColType:
 		col.Type.Kind = ColumnType_INT_ARRAY
 		colDatumType = parser.TypeIntArray
+		for i, e := range t.BoundsExprs {
+			te, err := e.TypeCheck(nil, parser.TypeInt)
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "couldn't get bound %d", i)
+			}
+			d, err := te.Eval(nil)
+			if err != nil {
+				return nil, nil, errors.Wrapf(err, "couldn't Eval bound %d", i)
+			}
+			b := d.(*parser.DInt)
+			col.Type.ArrayDimensions = append(col.Type.ArrayDimensions, int32(*b))
+		}
 	default:
 		return nil, nil, errors.Errorf("unexpected type %T", t)
 	}
