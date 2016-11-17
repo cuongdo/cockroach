@@ -422,6 +422,13 @@ func EncodeTableKey(b []byte, val parser.Datum, dir encoding.Direction) ([]byte,
 			}
 		}
 		return b, nil
+	case *parser.DArray:
+		// TODO(cuongdo): Change this to a better representation. This is only here
+		// to allow tests to pass. We do not yet support persisting DArrays.
+		if dir == encoding.Ascending {
+			return encoding.EncodeStringAscending(b, t.String()), nil
+		}
+		return encoding.EncodeStringDescending(b, t.String()), nil
 	}
 	return nil, errors.Errorf("unable to encode table key: %T", val)
 }
@@ -453,6 +460,10 @@ func EncodeTableValue(appendTo []byte, colID ColumnID, val parser.Datum) ([]byte
 		return encoding.EncodeTimeValue(appendTo, uint32(colID), t.Time), nil
 	case *parser.DInterval:
 		return encoding.EncodeDurationValue(appendTo, uint32(colID), t.Duration), nil
+	case *parser.DArray:
+		// TODO(cuongdo): Change this to a better representation. This is only here
+		// to allow tests to pass. We do not yet support persisting DArrays.
+		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.String())), nil
 	}
 	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
@@ -965,6 +976,16 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(parser.DInterval{Duration: d}), rkey, err
+	case parser.TypeIntArray:
+		// TODO(cuongdo): Change this to a better representation. This is only here
+		// to allow tests to pass. We do not yet support persisting DArrays.
+		var r string
+		if dir == encoding.Ascending {
+			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
+		} else {
+			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
+		}
+		return a.NewDString(parser.DString(r)), rkey, err
 	default:
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
 	}
@@ -1024,6 +1045,12 @@ func DecodeTableValue(a *DatumAlloc, valType parser.Type, b []byte) (parser.Datu
 		var d duration.Duration
 		b, d, err = encoding.DecodeDurationValue(b)
 		return a.NewDInterval(parser.DInterval{Duration: d}), b, err
+	case parser.TypeIntArray:
+		// TODO(cuongdo): Change this to a better representation. This is only here
+		// to allow tests to pass. We do not yet support persisting DArrays.
+		var data []byte
+		b, data, err = encoding.DecodeBytesValue(b)
+		return a.NewDString(parser.DString(data)), b, err
 	default:
 		return nil, nil, errors.Errorf("TODO(pmattis): decoded index value: %s", valType)
 	}
