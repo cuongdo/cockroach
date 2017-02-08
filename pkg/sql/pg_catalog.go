@@ -17,7 +17,6 @@
 package sql
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -782,21 +781,6 @@ CREATE TABLE pg_catalog.pg_foreign_table (
 	},
 }
 
-// colIDArrayToFakeIntVector returns a space-delimited string representation of
-// int2vectors and the like. This is needed for ORM compatibility, because some
-// ORMs like to split int vectors on spaces. So, we can't simply convert the
-// vector into a DArray, which is serialized as a comma-separated value.
-func colIDArrayToFakeIntVector(colIDs []sqlbase.ColumnID) parser.Datum {
-	var buf bytes.Buffer
-	for i, colID := range colIDs {
-		if i > 0 {
-			buf.WriteString(" ")
-		}
-		buf.WriteString(fmt.Sprint(colID))
-	}
-	return parser.NewDString(buf.String())
-}
-
 // See: https://www.postgresql.org/docs/9.6/static/catalog-pg-index.html.
 var pgCatalogIndexTable = virtualSchemaTable{
 	schema: `
@@ -814,7 +798,7 @@ CREATE TABLE pg_catalog.pg_index (
     indisready BOOL,
     indislive BOOL,
     indisreplident BOOL,
-    indkey STRING,
+    indkey INT2VECTOR,
     indcollation INT,
     indclass INT,
     indoption INT,
@@ -841,6 +825,11 @@ CREATE TABLE pg_catalog.pg_index (
 							}
 						}
 					}
+					indkeyArr, err := colIDArrayToDatum(index.ColumnIDs)
+					if err != nil {
+						return err
+					}
+					indkey := parser.NewDIntVectorFromDArray(indkeyArr.(*parser.DArray))
 					return addRow(
 						h.IndexOid(db, table, index), // indexrelid
 						tableOid,                     // indrelid
@@ -855,12 +844,12 @@ CREATE TABLE pg_catalog.pg_index (
 						parser.MakeDBool(parser.DBool(isReady)),      // indisready
 						parser.MakeDBool(true),                       // indislive
 						parser.MakeDBool(false),                      // indisreplident
-						colIDArrayToFakeIntVector(index.ColumnIDs),   // indkey
-						zeroVal,      // indcollation
-						zeroVal,      // indclass
-						zeroVal,      // indoption
-						parser.DNull, // indexprs
-						parser.DNull, // indpred
+						indkey,                                       // indkey
+						zeroVal,                                      // indcollation
+						zeroVal,                                      // indclass
+						zeroVal,                                      // indoption
+						parser.DNull,                                 // indexprs
+						parser.DNull,                                 // indpred
 					)
 				})
 			},
