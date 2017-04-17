@@ -95,6 +95,7 @@ import { EventPage } from "./containers/events";
 import Raft from "./containers/raft";
 import RaftRanges from "./containers/raftRanges";
 import ClusterViz from "./containers/clusterViz";
+import ExplainDistSQL from "./containers/explainDistSQL";
 import registrationSyncListener from "./services/registrationService";
 import { alertDataSync } from "./redux/alerts";
 
@@ -134,6 +135,7 @@ ReactDOM.render(
           <Route path="ranges" component={ RaftRanges } />
         </Route>
         <Route path="clusterviz" component={ ClusterViz } />
+        <Route path="explaindistsql" component={ ExplainDistSQL } />
       </Route>
     </Router>
   </Provider>,
