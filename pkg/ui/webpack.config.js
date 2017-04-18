@@ -40,6 +40,7 @@ module.exports = {
           limit: 10000,
         },
       },
+
       { test: /\.html$/, loader: 'file-loader' },
 
       // TODO(tamird,mrtracy,spencerkimball): remove this when all our code is
