@@ -59,9 +59,9 @@ type continuousLoadTest struct {
 	BenchmarkPrefix string
 	// NumNodes is the number of nodes in the test cluster.
 	NumNodes int
-	// Process must be one of the processes (e.g. block_writer) that's
+	// Processes contains a list of processes (e.g. block_writer) that must be
 	// downloaded by the Terraform configuration.
-	Process string
+	Processes []string
 	// CockroachDiskSizeGB is the size, in gigabytes, of the disks allocated
 	// for CockroachDB nodes. Leaving this as 0 accepts the default in the
 	// Terraform configs. This must be in GB, because Terraform only accepts
@@ -134,8 +134,10 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 	}
 	CheckGossip(ctx, t, f, longWaitTime, HasPeers(cl.NumNodes))
 	start := timeutil.Now()
-	if err := f.StartLoad(ctx, cl.Process, *flagCLTWriters); err != nil {
-		t.Fatal(err)
+	for _, process := range cl.Processes {
+		if err := f.StartLoad(ctx, process, *flagCLTWriters); err != nil {
+			t.Fatal(err)
+		}
 	}
 	f.Assert(ctx, t)
 
@@ -169,8 +171,10 @@ func (cl continuousLoadTest) Run(ctx context.Context, t testing.TB) {
 		case <-ctx.Done():
 			log.Infof(ctx, "load test finished")
 			f.Assert(ctx, t)
-			if err := f.Stop(ctx, 0, cl.Process); err != nil {
-				t.Error(err)
+			for _, process := range cl.Processes {
+				if err := f.Stop(ctx, 0, process); err != nil {
+					t.Error(err)
+				}
 			}
 			return
 		case <-stopper.ShouldStop():
@@ -195,24 +199,13 @@ func (cl continuousLoadTest) shortTestTimeout() string {
 	return regexp.MustCompile(`([a-z])0[0a-z]+`).ReplaceAllString(timeout.String(), `$1`)
 }
 
-func TestContinuousLoad_BlockWriter(t *testing.T) {
+func TestContinuousLoad_BlockWriterAndPhotos(t *testing.T) {
 	ctx := context.Background()
 	continuousLoadTest{
 		Prefix:              "bwriter",
-		BenchmarkPrefix:     "BenchmarkBlockWriter",
+		BenchmarkPrefix:     "BenchmarkBlockWriterAndPhotos",
 		NumNodes:            *flagNodes,
-		Process:             "block_writer",
-		CockroachDiskSizeGB: 200,
-	}.Run(ctx, t)
-}
-
-func TestContinuousLoad_Photos(t *testing.T) {
-	ctx := context.Background()
-	continuousLoadTest{
-		Prefix:              "photos",
-		BenchmarkPrefix:     "BenchmarkPhotos",
-		NumNodes:            *flagNodes,
-		Process:             "photos",
+		Processes:           []string{"block_writer", "photos"},
 		CockroachDiskSizeGB: 200,
 	}.Run(ctx, t)
 }
