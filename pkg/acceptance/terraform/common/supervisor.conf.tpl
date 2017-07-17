@@ -50,7 +50,7 @@ stdout_logfile=%(here)s/logs/%(program_name)s.stdout
 
 [program:photos]
 directory=%(here)s
-command=%(here)s/photos --users 1 --benchmark-name ${benchmark_name} --db postgres://root@localhost:${cockroach_port}/photos?sslmode=disable
+command=%(here)s/photos --users 1 --benchmark-name ${benchmark_name} --analytics=true --db postgres://root@localhost:${cockroach_port}/photos?sslmode=disable
 process_name=%(program_name)s
 numprocs=1
 autostart=false
