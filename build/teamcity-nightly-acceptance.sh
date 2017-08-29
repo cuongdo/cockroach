@@ -88,12 +88,11 @@ pkg/acceptance/prepare.sh
 
 # The log files that should be created by -l below can only
 # be created if the parent directory already exists. Ensure
-# that it exists before running the test.
-#
-# TODO(cuongdo): give this a unique name, to allow multiple local runs of the
-# nightlies to execute simultaneously
-mkdir -p artifacts/acceptance
-export TMPDIR=$PWD/artifacts/acceptance
+# that it exists before running the test
+ARTIFACT_ROOT="$PWD/artifacts/acceptance"
+mkdir -p "$ARTIFACT_ROOT"
+export TMPDIR="$ARTIFACT_ROOT/$(date +%Y%m%d-%H%H%S)"
+mkdir "$TMPDIR"
 
 TYPE=release-$(go env GOOS)
 case $TYPE in
