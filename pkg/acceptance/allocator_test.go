@@ -50,7 +50,7 @@ const (
 // Paths to cloud storage blobs that contain stores with pre-generated data.
 // Please keep /docs/cloud-resources.md up-to-date if you change these.
 const (
-	fixtureStore1s = "store-dumps/1node-10gb-262ranges"
+	fixtureStore1s = "store-dumps/1node-tpch10-838ranges"
 	fixtureStore1m = "store-dumps/1node-108gb-2065ranges"
 	fixtureStore3s = "store-dumps/3nodes-10g-262ranges"
 	fixtureStore6m = "store-dumps/6nodes-56gb-1038ranges"
